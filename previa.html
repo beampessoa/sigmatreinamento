@@ -1,3 +1,19 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>SIGMA TREINAMENTOS — prévia da casca</title>
+</head>
+
+<!-- PRÉVIA — arquivo único, sem dependências. Serve para OLHAR e APROVAR.
+     Não é o que vai para produção: lá o sigmatr-ui.js é um arquivo separado,
+     carregado por todas as páginas. Este HTML tem a casca embutida só para
+     poder abrir sozinho, num visualizador isolado. -->
+<body data-shell="frente" data-pagina="previa">
+  <div id="app"></div>
+
+  <script>
 /* ============================================================================
    SIGMA TREINAMENTOS — sigmatr-ui.js  v1.0.0
    Casca única. CSS injetado pelo JS. Não existe .css. Nenhum logo em base64.
@@ -19,9 +35,9 @@
    USO:
      <body data-shell="frente" data-pagina="inicio">
        <div id="app"></div>
-       <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-       <script src="sigmatr-ui.js"></script>
-       <script>SigmaTR.init({ titulo:'Meus treinamentos' });</script>
+       <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"><\/script>
+       <script src="sigmatr-ui.js"><\/script>
+       <script>SigmaTR.init({ titulo:'Meus treinamentos' });<\/script>
      </body>
 ============================================================================ */
 
@@ -501,7 +517,7 @@ button{font-family:inherit;cursor:pointer}
     if (db) return db;
     if (!window.supabase) panico('supabase-js ausente',
       'A casca precisa do cliente Supabase antes do sigmatr-ui.js.',
-      '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\n<script src="sigmatr-ui.js"></script>');
+      '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"><\/script>\n<script src="sigmatr-ui.js"><\/script>');
     db = window.supabase.createClient(CFG.url, CFG.key, {
       db: { schema: CFG.schema },
       auth: { persistSession:true, autoRefreshToken:true }
@@ -879,7 +895,7 @@ button{font-family:inherit;cursor:pointer}
     const app = document.getElementById('app');
     if (!app) panico('#app não existe',                       // erro 1: nunca em silêncio
       'A página precisa declarar o ponto de montagem. A casca não adivinha.',
-      '<body data-shell="frente">\n  <div id="app"></div>\n  <script src="sigmatr-ui.js"></script>\n</body>');
+      '<body data-shell="frente">\n  <div id="app"></div>\n  <script src="sigmatr-ui.js"><\/script>\n</body>');
 
     const sup = o.superficie || document.body.dataset.shell;
     if (!['painel','frente','verificacao','portao'].includes(sup)) panico('superfície inválida',
@@ -958,3 +974,133 @@ button{font-family:inherit;cursor:pointer}
 })();
 
 if (typeof window !== 'undefined') window.SigmaTR = SigmaTR;
+
+  </script>
+
+  <script>
+
+  /* ─── PRÉVIA: dados de demonstração. Nenhuma chamada ao banco. ─────────── */
+  const S = new URLSearchParams(location.search).get('s') || 'frente';
+  document.body.dataset.shell = S;
+
+  window.supabase = { createClient: () => ({           // dublê: a prévia não fala com o Supabase
+    auth:{ getSession:async()=>({data:{session:null}}), signInWithOtp:async()=>({error:null}),
+           verifyOtp:async()=>({data:{},error:null}), signOut:async()=>{} },
+    rpc: async()=>({data:null,error:null})
+  })};
+
+  const TRILHO = { funcao:'Soldador · TIG/Eletrodo revestido', itens:[
+    {titulo:'Integração REDUC',        status:'apto'},
+    {titulo:'NR-35 Trabalho em altura',status:'apto'},
+    {titulo:'NR-33 Espaço confinado',  status:'apto'},
+    {titulo:'PR-SOL-004 Soldagem',     status:'nunca_fez', agora:true},
+    {titulo:'Permissão de Trabalho',   status:'nunca_fez'},
+    {titulo:'Bloqueio e etiquetagem',  status:'nunca_fez'}]};
+
+  const FICHA = { nome:'José Carlos de Almeida', funcao:'Soldador', matricula:'GCB-04821',
+    status:'apto', procedimento_codigo:'PR-SOL-004', revisao:'03', publicado_em:'2026-05-18',
+    emitido_por:'Controle da Qualidade · GCB', treinamentos:[
+      {titulo:'Integração REDUC',        status:'apto'},
+      {titulo:'NR-35 Trabalho em altura',status:'apto'},
+      {titulo:'NR-33 Espaço confinado',  status:'apto'},
+      {titulo:'PR-SOL-004 Soldagem',     status:'apto'}]};
+
+  (async () => {
+    await SigmaTR.init({
+      demo:true, superficie:S,
+      titulo:    S==='painel' ? 'Aderência por função' : 'Sua liberação para a área',
+      subtitulo: 'GCB Manutenção Industrial · Contrato SAP 4600686554',
+      usuario:   S==='painel' ? {nome:'Ana Ribeiro', papel:'admin', funcao:'Controle da Qualidade'}
+                              : {nome:'José Carlos de Almeida', papel:'treinando', funcao:'Soldador'},
+      trilho: TRILHO, ficha: FICHA
+    });
+    const app = document.getElementById('app');
+    const E = SigmaTR.esc;
+
+    if (S === 'portao') {
+      app.innerHTML = SigmaTR.portao({
+        titulo:'Entrar',
+        texto:'Enviamos um código de 6 dígitos para o seu e-mail. Não usamos senha.',
+        miolo:`<div class="st-campo"><label for="em">E-mail cadastrado</label>
+                 <input id="em" type="email" placeholder="voce@empresa.com.br"></div>
+               <button class="st-btn" id="b">Enviar código</button>`,
+        pe:'Primeiro acesso? <a href="#">Ative seu cadastro</a>'
+      });
+      document.getElementById('b').onclick = () => SigmaTR.toast('Na prévia o código não é enviado de verdade.');
+    }
+
+    if (S === 'frente') {
+      app.innerHTML = `
+        ${SigmaTR.agora({ olho:'Agora', titulo:'PR-SOL-004 · Soldagem em tubulação',
+          texto:'12 minutos. Você precisa deste procedimento para ser liberado como soldador na parada.',
+          acao:'Continuar de onde parou · 04:10', href:'#' })}
+        <div class="st-cartao" style="margin-bottom:14px">
+          <div style="font-size:11px;font-weight:700;letter-spacing:.8px;color:#9CA3AF;text-transform:uppercase;margin-bottom:10px">Já liberados</div>
+          <div style="display:flex;flex-direction:column;gap:9px">
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+              <span style="font-size:14px;font-weight:600">Integração REDUC</span>${SigmaTR.tarja('apto')}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+              <span style="font-size:14px;font-weight:600">NR-35 Trabalho em altura</span>${SigmaTR.validade('2026-07-22')}</div>
+            <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+              <span style="font-size:14px;font-weight:600">NR-33 Espaço confinado</span>${SigmaTR.tarja('apto')}</div>
+          </div></div>
+        ${SigmaTR.vazio({ titulo:'Seu selo aparece aqui',
+          texto:'Ao liberar todos os procedimentos da sua função, o selo é emitido com QR e validade de 24 meses.' })}
+        ${SigmaTR.procedencia({ codigo:'PR-SOL-004', revisao:'03', publicado_em:'2026-05-18' })}`;
+      setTimeout(()=>SigmaTR.sinalFraco(true), 1400);
+      setTimeout(()=>SigmaTR.sinalFraco(false), 5400);
+    }
+
+    if (S === 'painel') {
+      const cartao = (r,v,c,n) => `<div class="st-cartao">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.8px;color:#9CA3AF;text-transform:uppercase">${r}</div>
+        <div style="font-size:30px;font-weight:800;margin:6px 0 2px;${c?'color:'+c:''}">${v}</div>
+        <div style="font-size:12.5px;color:#6B7280">${n}</div></div>`;
+      const linha = (nome,cpf,f,st,val) => `<tr style="border-bottom:1px solid #F3F4F6">
+        <td style="padding:11px 16px;font-weight:600">${nome}</td>
+        <td style="padding:11px 16px;color:#6B7280;font-family:ui-monospace,monospace">${SigmaTR.fmt.cpfParcial(cpf)}</td>
+        <td style="padding:11px 16px;color:#6B7280">${f}</td>
+        <td style="padding:11px 16px">${SigmaTR.tarja(st)}</td>
+        <td style="padding:11px 16px">${val?SigmaTR.validade(val):'<span style="color:#9CA3AF">—</span>'}</td></tr>`;
+      app.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px;margin-bottom:18px">
+          ${cartao('Aptos hoje','112','','de 137 pessoas ativas')}
+          ${cartao('Vencendo em 30 dias','9','#B45309','3 estão mobilizadas')}
+          ${cartao('Bloqueando mobilização','4','#B91C1C','revisão nova sem carência')}
+        </div>
+        <div class="st-cartao" style="padding:0;overflow:hidden">
+          <div style="padding:14px 16px;border-bottom:1px solid #E5E7EB;font-weight:700;font-size:14px">Pessoas</div>
+          <table style="width:100%;border-collapse:collapse;font-size:13.5px"><tbody>
+            ${linha('José Carlos de Almeida','12345678901','Soldador','apto','2026-07-22')}
+            ${linha('Marcos Vinícius Prado','98765432100','Caldeireiro','inapto_revisao','2026-06-02')}
+            ${linha('Rafael Souza Lima','11122233344','Inspetor','nunca_fez',null)}
+          </tbody></table></div>
+        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+          <button class="st-btn" style="width:auto;padding:10px 16px" id="pub">Publicar revisão 04</button>
+          <button class="st-btn st-btn--fantasma" style="width:auto;padding:10px 16px" id="cego">Publicar (impacto indisponível)</button>
+        </div>
+        ${SigmaTR.procedencia({ codigo:'PR-SOL-004', revisao:'03', publicado_em:'2026-05-18' })}`;
+      document.getElementById('pub').onclick = async () => {
+        const ok = await SigmaTR.confirmar({ titulo:'Publicar a revisão 04 de PR-SOL-004?',
+          texto:'Revisão publicada não se edita. Para corrigir, só uma revisão nova.',
+          impacto:{completo:true, afetados:87, mobilizados:14, carencia_dias:15},
+          acao:'Publicar revisão', perigo:true });
+        SigmaTR.toast(ok?'Revisão 04 publicada. Carência de 15 dias gravada.':'Publicação cancelada.', ok?'ok':'');
+      };
+      document.getElementById('cego').onclick = () => SigmaTR.confirmar({
+        titulo:'Publicar a revisão 04 de PR-SOL-004?', texto:'Revisão publicada não se edita.',
+        impacto:{completo:false}, acao:'Publicar revisão', perigo:true });
+    }
+
+    const sw = document.createElement('div');
+    sw.style.cssText='position:fixed;right:12px;bottom:12px;z-index:200;display:flex;gap:4px;'
+      +'background:#111827;padding:5px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.35)';
+    sw.innerHTML=['portao','frente','painel','verificacao'].map(x=>
+      `<a href="?s=${x}" style="padding:7px 12px;border-radius:999px;font:600 12px 'Exo 2',sans-serif;
+        text-decoration:none;color:${x===S?'#fff':'#94A3B8'};background:${x===S?'#0F4CBA':'transparent'}">${x}</a>`).join('');
+    document.body.appendChild(sw);
+  })();
+
+  </script>
+</body>
+</html>
