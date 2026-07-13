@@ -125,6 +125,16 @@ button{font-family:inherit;cursor:pointer}
 .st-shell--frente > .st-trilho{grid-area:trilho}
 .st-shell--frente > .st-main{grid-area:main}
 
+.st-shell--portao{
+  display:grid; min-height:100vh; grid-template-rows:1fr auto;
+  grid-template-areas:"main" "proc";
+  background:linear-gradient(180deg,#F5F7FA,#E8EDF4);
+}
+.st-shell--portao > .st-main{
+  grid-area:main; display:flex; align-items:center; justify-content:center; padding:24px 18px;
+}
+.st-shell--portao > .st-proc{grid-area:proc}
+
 .st-shell--verificacao{
   display:grid; min-height:100vh; grid-template-rows:1fr auto;
   grid-template-areas:"veredito" "proc";
@@ -333,6 +343,55 @@ button{font-family:inherit;cursor:pointer}
   font-size:11px; letter-spacing:.5px; opacity:.9; text-transform:uppercase; font-weight:600;
 }
 
+/* ── PORTÃO (login · ativar) ─────────────────────────────────────────────── */
+.st-portao{
+  width:100%; max-width:400px; background:#fff; border:1px solid var(--st-linha);
+  border-radius:14px; box-shadow:var(--st-sombra-2); padding:26px 22px;
+}
+.st-portao-marca{
+  display:flex; align-items:center; gap:10px; margin-bottom:18px;
+  padding-bottom:16px; border-bottom:1px solid var(--st-linha);
+}
+.st-portao-marca .st-logo{width:64px; height:34px}
+.st-portao h1{margin:0 0 6px; font-size:20px; font-weight:700; line-height:1.25}
+.st-portao > p{margin:0 0 18px; font-size:13.5px; color:var(--st-tinta-2); line-height:1.5}
+.st-portao-passo{
+  font-size:10.5px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+  color:var(--st-tinta-3); margin-bottom:6px;
+}
+.st-campo{margin-bottom:14px}
+.st-campo label{
+  display:block; font-size:12.5px; font-weight:600; color:var(--st-tinta); margin-bottom:5px;
+}
+.st-campo input{
+  width:100%; padding:12px 13px; min-height:48px;
+  border:1px solid var(--st-linha); border-radius:var(--st-r); background:#fff;
+  color:var(--st-tinta); outline:none;
+}
+.st-campo input:focus-visible{border-color:var(--st-primaria); box-shadow:0 0 0 3px rgba(15,76,186,.14)}
+.st-campo small{display:block; margin-top:5px; font-size:11.5px; color:var(--st-tinta-2)}
+.st-campo--erro input{border-color:var(--st-erro)}
+.st-erro-msg{
+  display:flex; gap:7px; align-items:flex-start;
+  background:#FEF3F2; border:1px solid #FECACA; border-radius:var(--st-r);
+  padding:10px 12px; margin-bottom:14px; font-size:13px; color:#B91C1C; line-height:1.45;
+}
+.st-erro-msg b{font-weight:700}
+.st-codigo input{
+  text-align:center; font-size:26px; font-weight:700; letter-spacing:10px;
+  padding-left:10px; font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+.st-portao-pe{
+  margin-top:16px; padding-top:14px; border-top:1px solid var(--st-linha);
+  font-size:12.5px; color:var(--st-tinta-2); text-align:center;
+}
+.st-portao-pe a{color:var(--st-primaria); font-weight:600; text-decoration:none}
+.st-elo{
+  background:none; border:0; padding:0; color:var(--st-primaria);
+  font-size:12.5px; font-weight:600;
+}
+.st-carregando{opacity:.6; pointer-events:none}
+
 /* ── TOAST / MODAL / VAZIO ───────────────────────────────────────────────── */
 .st-toasts{position:fixed; left:0; right:0; bottom:16px; z-index:90; display:flex;
   flex-direction:column; align-items:center; gap:8px; pointer-events:none; padding:0 16px}
@@ -463,6 +522,25 @@ button{font-family:inherit;cursor:pointer}
     confirmarCodigo: (email, token) => conectar().auth.verifyOtp({ email, token, type:'email' }),
     sair: async () => { await conectar().auth.signOut(); location.href = '/login.html'; }
   };
+
+  /** fn(nome, corpo) — serverless. O token vai no cabeçalho; o servidor resolve
+      pessoa_id pela SESSÃO. Se pessoa_id viesse no corpo, o cliente creditaria
+      progresso pro colega. Nunca mandar pessoa_id daqui. */
+  async function fn(nome, corpo = {}, { publico = false } = {}){
+    const cab = { 'Content-Type':'application/json' };
+    if (!publico){
+      const s = await sessao();
+      if (!s) { location.href = '/login.html'; throw new Error('sem sessão'); }
+      cab.Authorization = `Bearer ${s.access_token}`;
+    }
+    const r = await fetch(`${CFG.fn}/${nome}`, {
+      method:'POST', headers:cab, body:JSON.stringify(corpo), cache:'no-store'
+    });
+    const t = await r.text();
+    let j = null; try { j = t ? JSON.parse(t) : null; } catch {}
+    if (!r.ok) throw Object.assign(new Error(j?.erro || `Falha em ${nome}`), { status:r.status, corpo:j });
+    return j;
+  }
 
   /* chamadas ao banco sempre por FUNÇÃO — nunca select direto na view
      (view roda com privilégio do dono; SELECT em vw_aptidao_pessoa vaza todo mundo) */
@@ -687,6 +765,42 @@ button{font-family:inherit;cursor:pointer}
     slot.replaceWith(el);
   }
 
+  /** PORTAO — login e ativação. Sem sessão, sem menu, sem sidebar.
+      É aqui (e só aqui) que o CPF é digitado. Vai no CORPO da requisição, nunca na URL. */
+  function montarPortao(app, o){
+    document.body.classList.add('st-shell','st-shell--portao');
+    app.classList.add('st-main');
+    const p = document.createElement('div');
+    p.innerHTML = procedencia({
+      codigo: 'SIGMA TREINAMENTOS', revisao: VERSAO,
+      publicado_em: null, emitido_por: BRAND.contratante.nome + ' · ' + BRAND.contratante.texto
+    });
+    const el = p.firstElementChild; el.classList.add('st-proc');
+    document.body.appendChild(el);
+  }
+
+  /** cartao do portão — a moldura. O miolo (passo) é da página. */
+  function portao({ titulo, texto, miolo, pe = '' }){
+    return `<div class="st-portao">
+      <div class="st-portao-marca">
+        <img class="st-logo" src="${esc(BRAND.emissor.logo)}" alt="${esc(BRAND.emissor.nome)}"
+             onerror="this.outerHTML='<span class=&quot;st-marca-txt&quot;>SIGMA CODE</span>'">
+        <div class="st-sep"></div>
+        <div class="st-cabeca">
+          <div class="st-tit">${esc(BRAND.produto)}</div>
+          <div class="st-sub">${esc(BRAND.contratante.nome)}</div>
+        </div>
+      </div>
+      <h1>${esc(titulo)}</h1>
+      <p>${esc(texto)}</p>
+      ${miolo}
+      ${pe ? `<div class="st-portao-pe">${pe}</div>` : ''}
+    </div>`;
+  }
+
+  /** para onde a pessoa vai depois de entrar — decidido pelo papel, nunca pela URL de volta */
+  const rotaPorPapel = (p) => p === 'admin' ? '/admin/aderencia.html' : '/treinando/inicio.html';
+
   /** VERIFICACAO — o fiscal, no pátio, no sol. Sem header, sem menu, sem navegação.
       A primeira coisa na tela é a PALAVRA. A página é a tarja. */
   function montarVerificacao(app, o){
@@ -766,14 +880,26 @@ button{font-family:inherit;cursor:pointer}
       '<body data-shell="frente">\n  <div id="app"></div>\n  <script src="sigmatr-ui.js"></script>\n</body>');
 
     const sup = o.superficie || document.body.dataset.shell;
-    if (!['painel','frente','verificacao'].includes(sup)) panico('superfície inválida',
-      `data-shell="${sup ?? ''}" não é uma superfície. São três, e elas não se misturam.`,
-      'data-shell="painel"  → admin, desktop\ndata-shell="frente"      → treinando, celular\ndata-shell="verificacao"  → público, QR');
+    if (!['painel','frente','verificacao','portao'].includes(sup)) panico('superfície inválida',
+      `data-shell="${sup ?? ''}" não é uma superfície. São quatro, e elas não se misturam.`,
+      'data-shell="portao"       → login e ativação, sem sessão\ndata-shell="painel"       → admin, desktop\ndata-shell="frente"       → treinando, celular\ndata-shell="verificacao"  → público, QR');
     superficieAtual = sup;
     o.pagina = o.pagina || document.body.dataset.pagina || '';
 
     // público não autentica e não fala com o banco direto (serverless + service_role)
     if (sup === 'verificacao'){ montarVerificacao(app, o); ligarCliques(); return { superficie:sup }; }
+
+    // portão: quem já tem sessão válida não vê o login — vai direto pro seu lugar
+    if (sup === 'portao'){
+      montarPortao(app, o);
+      ligarCliques();
+      if (!o.demo){
+        const j = await sessao();
+        const pj = papel(j);
+        if (j && pj) { location.replace(rotaPorPapel(pj)); return; }
+      }
+      return { superficie:sup };
+    }
 
     let s = o.demo ? null : await sessao();
     if (!o.demo && !s){ location.href = '/login.html'; return; }
@@ -822,8 +948,8 @@ button{font-family:inherit;cursor:pointer}
   /* ══ 12. API PÚBLICA ═════════════════════════════════════════════════════ */
   return {
     VERSAO, BRAND, ROTULO, CFG,
-    init, auditar, conectar, sessao, papel, auth, rpc,
-    tarja, validade, trilho, trilhar, agora, procedencia,
+    init, auditar, conectar, sessao, papel, auth, rpc, fn, rotaPorPapel,
+    tarja, validade, trilho, trilhar, agora, procedencia, portao,
     confirmar, toast, vazio, sinalFraco, pintarFicha, rotular,
     fmt, mascararCPF, esc
   };

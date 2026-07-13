@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Sua liberação · SIGMA TREINAMENTOS</title>
+</head>
+
+<body data-shell="frente" data-pagina="inicio">
+  <div id="app"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  /* ── BOOT ──────────────────────────────────────────────────────────────────
+     Se o sigmatr-ui.js não carregar, a página NÃO fica branca: ela grita.
+     Também procura o arquivo em mais de um caminho — pasta rasa ou aninhada. */
+  (function () {
+    function panico(t, d, c) {
+      document.body.innerHTML =
+        '<div style="position:fixed;inset:0;background:#B91C1C;color:#fff;padding:26px;overflow:auto;'
+        + 'font:15px/1.55 -apple-system,Segoe UI,sans-serif">'
+        + '<h1 style="margin:0 0 10px;font-size:22px">Casca não carregou — ' + t + '</h1>'
+        + '<p style="margin:0 0 12px">' + d + '</p>'
+        + '<pre style="background:rgba(0,0,0,.28);padding:12px;border-radius:8px;font-size:12.5px;'
+        + 'white-space:pre-wrap;margin:0">' + c + '</pre></div>';
+      throw new Error('[boot] ' + t);
+    }
+    window.STBOOT = function (pagina) {
+      var vias = ['sigmatr-ui.js', '../sigmatr-ui.js', '/sigmatr-ui.js'];
+      (function tenta() {
+        if (!vias.length) return panico(
+          'sigmatr-ui.js não foi encontrado',
+          'O HTML abriu, mas o arquivo da casca não está em nenhum dos caminhos procurados.',
+          ['Estrutura esperada:', '  sigmatr-ui.js', '  login.html', '  ativar.html',
+           '  shell.html', '  treinando/inicio.html', '',
+           'E sirva por HTTP, não por file:// —', '  python3 -m http.server 8000',
+           '  http://localhost:8000/login.html'].join('\n'));
+        var s = document.createElement('script');
+        s.src = vias.shift();
+        s.onerror = tenta;
+        s.onload = function () {
+          if (!window.SigmaTR) return panico('sigmatr-ui.js carregou, mas não definiu SigmaTR',
+            'O arquivo pode ter vindo truncado no download.', 'Baixe o sigmatr-ui.js de novo.');
+          if (!window.supabase) return panico('supabase-js não carregou',
+            'O CDN foi bloqueado (rede fechada ou offline). A casca precisa dele antes de montar.',
+            '&lt;script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"&gt;&lt;/script&gt;');
+          pagina();
+        };
+        document.head.appendChild(s);
+      })();
+    };
+  })();
+  </script>
+  <script>
+  STBOOT(async () => {
+    const S = await SigmaTR.init({ titulo:'Sua liberação para a área' });
+    const app = document.getElementById('app');
+
+    app.innerHTML = `<div class="st-cartao" style="text-align:center;color:#6B7280;font-size:13.5px">
+      Carregando seus procedimentos…</div>`;
+
+    /* ── ÚNICO ponto de contato com o banco.
+       Chamada por FUNÇÃO — nunca select direto na view (a view roda com privilégio
+       do dono; dar SELECT em vw_aptidao_pessoa para authenticated vaza todo mundo). ── */
+    let bruto;
+    try {
+      const { data, error } = await SigmaTR.rpc.minhaFicha();
+      if (error) throw error;
+      bruto = data;
+    } catch (e) {
+      app.innerHTML = `<div class="st-erro-msg"><b>!</b><span>
+        Não conseguimos carregar seus procedimentos agora. Isso não afeta seu progresso —
+        ele está guardado. Tente de novo em instantes.</span></div>
+        <button class="st-btn st-btn--fantasma" onclick="location.reload()">Tentar de novo</button>`;
+      SigmaTR.toast('Falha ao carregar. Verifique o sinal.', 'erro');
+      return;
+    }
+
+    /* ── ADAPTADOR — o único lugar a mexer se o nome de uma coluna do mt06 for outro.
+       Nenhuma outra linha desta página conhece o formato do banco. ── */
+    function normalizar(b){
+      const f = Array.isArray(b) ? (b[0] || {}) : (b || {});
+      const lista = f.treinamentos || f.itens || (Array.isArray(b) && b[0]?.titulo ? b : []) || [];
+      return {
+        nome:    f.nome || f.pessoa_nome || S.usuario?.nome || '',
+        funcao:  f.funcao || f.funcao_nome || '',
+        codigo:  f.codigo_publico || f.codigo || null,
+        aptidao: f.aptidao || f.status_geral || null,
+        itens: lista.map(t => ({
+          revisao_id:  t.revisao_id || t.treinamento_revisao_id,
+          titulo:      t.titulo || t.treinamento_titulo,
+          codigo:      t.codigo || t.treinamento_codigo,
+          status:      t.status || 'nunca_fez',
+          valido_ate:  t.valido_ate || null,
+          segundo:     t.segundo_retomada ?? t.ultimo_segundo ?? 0,
+          duracao:     t.duracao_segundos ?? null,
+          pode_prova:  !!(t.pode_fazer_prova ?? t.pode_prova),
+          tentativas:  t.tentativas_restantes ?? null,
+          revisao:     t.revisao ?? t.revisao_numero ?? null,
+          publicado_em:t.publicado_em ?? null
+        }))
+      };
+    }
+
+    const f = normalizar(bruto);
+    const liberado = (s) => s === 'apto' || s === 'apto_com_pendencia';
+
+    /* o "agora" é decidido pelo sistema, não pelo treinando: o primeiro não liberado.
+       Vencido e revisão nova entram na frente — bloqueiam mobilização hoje. */
+    const urgentes = f.itens.filter(i => i.status === 'inapto_vencido' || i.status === 'inapto_revisao');
+    const pendentes = f.itens.filter(i => !liberado(i.status));
+    const alvo = urgentes[0] || pendentes[0] || null;
+
+    /* Trilho no topo: segmentos, nunca porcentagem. Cada segmento é um procedimento. */
+    SigmaTR.trilhar({
+      funcao: f.funcao,
+      itens: f.itens.map(i => ({ titulo:i.titulo, status:i.status, agora: alvo && i.revisao_id === alvo.revisao_id }))
+    });
+
+    /* ── o cartão AGORA — nada compete com ele ─────────────────────────── */
+    let cartaoAgora;
+    if (!alvo) {
+      cartaoAgora = SigmaTR.agora({
+        olho:  'Você está liberado',
+        titulo:'Todos os procedimentos da sua função estão liberados',
+        texto: 'Seu selo está emitido e vale por 24 meses. O QR do seu crachá aponta para a sua ficha, que é atualizada sozinha.',
+        acao:  'Ver meu selo',
+        href:  '/treinando/selo.html'
+      });
+    } else if (alvo.status === 'inapto_revisao') {
+      cartaoAgora = SigmaTR.agora({
+        olho:  'Revisão nova · prioridade',
+        titulo: `${alvo.codigo ? alvo.codigo + ' · ' : ''}${alvo.titulo}`,
+        texto: 'O procedimento foi revisado. Refaça para continuar liberado — você está em carência até a data do aviso.',
+        acao:  'Ver o que mudou',
+        href:  `/treinando/player.html?rev=${encodeURIComponent(alvo.revisao_id)}`
+      });
+    } else if (alvo.status === 'inapto_vencido') {
+      cartaoAgora = SigmaTR.agora({
+        olho:  'Vencido · prioridade',
+        titulo: `${alvo.codigo ? alvo.codigo + ' · ' : ''}${alvo.titulo}`,
+        texto: 'A validade de 24 meses acabou. Refaça para voltar a ser liberado para a área.',
+        acao:  'Refazer procedimento',
+        href:  `/treinando/player.html?rev=${encodeURIComponent(alvo.revisao_id)}`
+      });
+    } else if (alvo.pode_prova) {
+      cartaoAgora = SigmaTR.agora({
+        olho:  'Agora',
+        titulo: `Prova · ${alvo.titulo}`,
+        texto:  `Você já viu o procedimento inteiro. A prova tem nota mínima 70${
+                  alvo.tentativas != null ? ` e você tem ${alvo.tentativas} tentativa${alvo.tentativas===1?'':'s'}` : ''}.`,
+        acao:  'Fazer a prova',
+        href:  `/treinando/prova.html?rev=${encodeURIComponent(alvo.revisao_id)}`
+      });
+    } else {
+      const retoma = alvo.segundo > 30;
+      cartaoAgora = SigmaTR.agora({
+        olho:  'Agora',
+        titulo: `${alvo.codigo ? alvo.codigo + ' · ' : ''}${alvo.titulo}`,
+        texto:  retoma
+          ? 'Você parou no meio. Continue de onde parou — seu progresso está guardado.'
+          : 'Assista ao procedimento e responda os pontos de checagem. Depois vem a prova.',
+        acao:  retoma ? `Continuar de onde parou · ${SigmaTR.fmt.tempo(alvo.segundo)}` : 'Iniciar liberação',
+        href:  `/treinando/player.html?rev=${encodeURIComponent(alvo.revisao_id)}`
+      });
+    }
+
+    /* ── lista: o resto. Discreta, abaixo, sem competir com o "agora". ── */
+    const linha = (i) => `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;
+                  padding:10px 0;border-bottom:1px solid #F3F4F6">
+        <div style="min-width:0">
+          <div style="font-size:14px;font-weight:600;line-height:1.3">${SigmaTR.esc(i.titulo)}</div>
+          ${i.codigo ? `<div style="font-size:11.5px;color:#9CA3AF;font-family:ui-monospace,monospace">
+            ${SigmaTR.esc(i.codigo)}${i.revisao ? ' · rev. ' + SigmaTR.esc(i.revisao) : ''}</div>` : ''}
+        </div>
+        <div style="flex:none">${
+          liberado(i.status) && i.valido_ate ? SigmaTR.validade(i.valido_ate) : SigmaTR.tarja(i.status)
+        }</div>
+      </div>`;
+
+    const jaLiberados = f.itens.filter(i => liberado(i.status));
+    const oQueFalta   = f.itens.filter(i => !liberado(i.status) && (!alvo || i.revisao_id !== alvo.revisao_id));
+
+    const bloco = (titulo, itens) => itens.length ? `
+      <div class="st-cartao" style="margin-bottom:14px">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.8px;color:#9CA3AF;
+                    text-transform:uppercase;margin-bottom:4px">${titulo}</div>
+        ${itens.map(linha).join('')}
+      </div>` : '';
+
+    app.innerHTML = `
+      ${cartaoAgora}
+      ${bloco('O que ainda falta', oQueFalta)}
+      ${bloco('Já liberados', jaLiberados)}
+      ${!f.itens.length ? SigmaTR.vazio({
+        titulo:'Nenhum procedimento na sua matriz ainda',
+        texto:'Assim que sua função for definida pelo Controle da Qualidade, seus procedimentos aparecem aqui.'
+      }) : ''}
+    `;
+
+    /* rastreabilidade no rodapé: quem revisou, qual revisão, quando. Sem logotipo. */
+    const ref = f.itens.find(i => i.publicado_em) || {};
+    app.insertAdjacentHTML('beforeend', SigmaTR.procedencia({
+      codigo: f.codigo ? `Ficha ${f.codigo}` : 'SIGMA TREINAMENTOS',
+      revisao: ref.revisao, publicado_em: ref.publicado_em
+    }));
+  });
+  </script>
+</body>
+</html>

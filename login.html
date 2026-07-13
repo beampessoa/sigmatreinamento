@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Entrar · SIGMA TREINAMENTOS</title>
+</head>
+
+<body data-shell="portao" data-pagina="login">
+  <div id="app"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+  /* ── BOOT ──────────────────────────────────────────────────────────────────
+     Se o sigmatr-ui.js não carregar, a página NÃO fica branca: ela grita.
+     Também procura o arquivo em mais de um caminho — pasta rasa ou aninhada. */
+  (function () {
+    function panico(t, d, c) {
+      document.body.innerHTML =
+        '<div style="position:fixed;inset:0;background:#B91C1C;color:#fff;padding:26px;overflow:auto;'
+        + 'font:15px/1.55 -apple-system,Segoe UI,sans-serif">'
+        + '<h1 style="margin:0 0 10px;font-size:22px">Casca não carregou — ' + t + '</h1>'
+        + '<p style="margin:0 0 12px">' + d + '</p>'
+        + '<pre style="background:rgba(0,0,0,.28);padding:12px;border-radius:8px;font-size:12.5px;'
+        + 'white-space:pre-wrap;margin:0">' + c + '</pre></div>';
+      throw new Error('[boot] ' + t);
+    }
+    window.STBOOT = function (pagina) {
+      var vias = ['sigmatr-ui.js', '../sigmatr-ui.js', '/sigmatr-ui.js'];
+      (function tenta() {
+        if (!vias.length) return panico(
+          'sigmatr-ui.js não foi encontrado',
+          'O HTML abriu, mas o arquivo da casca não está em nenhum dos caminhos procurados.',
+          ['Estrutura esperada:', '  sigmatr-ui.js', '  login.html', '  ativar.html',
+           '  shell.html', '  treinando/inicio.html', '',
+           'E sirva por HTTP, não por file:// —', '  python3 -m http.server 8000',
+           '  http://localhost:8000/login.html'].join('\n'));
+        var s = document.createElement('script');
+        s.src = vias.shift();
+        s.onerror = tenta;
+        s.onload = function () {
+          if (!window.SigmaTR) return panico('sigmatr-ui.js carregou, mas não definiu SigmaTR',
+            'O arquivo pode ter vindo truncado no download.', 'Baixe o sigmatr-ui.js de novo.');
+          if (!window.supabase) return panico('supabase-js não carregou',
+            'O CDN foi bloqueado (rede fechada ou offline). A casca precisa dele antes de montar.',
+            '&lt;script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"&gt;&lt;/script&gt;');
+          pagina();
+        };
+        document.head.appendChild(s);
+      })();
+    };
+  })();
+  </script>
+  <script>
+  STBOOT(async () => {
+    await SigmaTR.init();           // se já tem sessão com papel sigmatr, nem chega aqui
+    const app = document.getElementById('app');
+
+    let email = '';
+    const err = (m) => `<div class="st-erro-msg"><b>!</b><span>${SigmaTR.esc(m)}</span></div>`;
+
+    /* ── passo 1: e-mail ───────────────────────────────────────────────── */
+    function passoEmail(msg = ''){
+      app.innerHTML = SigmaTR.portao({
+        titulo: 'Entrar',
+        texto:  'Enviamos um código de 6 dígitos para o seu e-mail. Não usamos senha.',
+        miolo: `
+          ${msg ? err(msg) : ''}
+          <div class="st-campo">
+            <label for="em">E-mail cadastrado</label>
+            <input id="em" type="email" inputmode="email" autocomplete="email"
+                   autocapitalize="off" spellcheck="false" placeholder="voce@empresa.com.br" value="${SigmaTR.esc(email)}">
+          </div>
+          <button class="st-btn" id="enviar">Enviar código</button>`,
+        pe: 'Primeiro acesso? <a href="/ativar.html">Ative seu cadastro</a>'
+      });
+      const campo = document.getElementById('em');
+      campo.focus();
+      campo.addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('enviar').click(); });
+
+      document.getElementById('enviar').onclick = async (e) => {
+        email = campo.value.trim().toLowerCase();
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return passoEmail('E-mail inválido. Confira e tente de novo.');
+        e.target.classList.add('st-carregando'); e.target.textContent = 'Enviando…';
+        const { error } = await SigmaTR.auth.enviarCodigo(email);   // shouldCreateUser:false
+        if (error) return passoEmail(
+          'Não encontramos esse e-mail. Se é seu primeiro acesso, ative o cadastro com seu CPF.');
+        passoCodigo();
+      };
+    }
+
+    /* ── passo 2: código de 6 dígitos ──────────────────────────────────── */
+    function passoCodigo(msg = ''){
+      app.innerHTML = SigmaTR.portao({
+        titulo: 'Digite o código',
+        texto:  `Enviamos 6 dígitos para ${email}. O código vale por 1 hora.`,
+        miolo: `
+          ${msg ? err(msg) : ''}
+          <div class="st-campo st-codigo">
+            <label for="cd">Código</label>
+            <input id="cd" type="text" inputmode="numeric" autocomplete="one-time-code"
+                   maxlength="6" pattern="[0-9]*" placeholder="000000">
+          </div>
+          <button class="st-btn" id="entrar">Entrar</button>`,
+        pe: '<button class="st-elo" id="voltar">Usar outro e-mail</button>'
+      });
+      const campo = document.getElementById('cd');
+      campo.focus();
+      campo.addEventListener('input', () => {
+        campo.value = campo.value.replace(/\D/g,'').slice(0,6);
+        if (campo.value.length === 6) document.getElementById('entrar').click();
+      });
+      document.getElementById('voltar').onclick = () => passoEmail();
+
+      document.getElementById('entrar').onclick = async (e) => {
+        const codigo = campo.value.trim();
+        if (codigo.length !== 6) return passoCodigo('O código tem 6 dígitos.');
+        e.target.classList.add('st-carregando'); e.target.textContent = 'Verificando…';
+
+        const { data, error } = await SigmaTR.auth.confirmarCodigo(email, codigo);
+        if (error) return passoCodigo('Código incorreto ou expirado. Peça um novo.');
+
+        const p = SigmaTR.papel(data.session);   // app_metadata.roles.sigmatr — namespaced
+        if (!p) return passoCodigo(
+          'Sua conta existe, mas ainda não tem acesso ao SIGMA TREINAMENTOS. Fale com o Controle da Qualidade.');
+
+        location.replace(SigmaTR.rotaPorPapel(p));
+      };
+    }
+
+    passoEmail();
+  });
+  </script>
+</body>
+</html>

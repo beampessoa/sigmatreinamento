@@ -13,7 +13,47 @@
   <div id="app"></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="sigmatr-ui.js"></script>
+<script>
+  /* ── BOOT ──────────────────────────────────────────────────────────────────
+     Se o sigmatr-ui.js não carregar, a página NÃO fica branca: ela grita.
+     Também procura o arquivo em mais de um caminho — pasta rasa ou aninhada. */
+  (function () {
+    function panico(t, d, c) {
+      document.body.innerHTML =
+        '<div style="position:fixed;inset:0;background:#B91C1C;color:#fff;padding:26px;overflow:auto;'
+        + 'font:15px/1.55 -apple-system,Segoe UI,sans-serif">'
+        + '<h1 style="margin:0 0 10px;font-size:22px">Casca não carregou — ' + t + '</h1>'
+        + '<p style="margin:0 0 12px">' + d + '</p>'
+        + '<pre style="background:rgba(0,0,0,.28);padding:12px;border-radius:8px;font-size:12.5px;'
+        + 'white-space:pre-wrap;margin:0">' + c + '</pre></div>';
+      throw new Error('[boot] ' + t);
+    }
+    window.STBOOT = function (pagina) {
+      var vias = ['sigmatr-ui.js', '../sigmatr-ui.js', '/sigmatr-ui.js'];
+      (function tenta() {
+        if (!vias.length) return panico(
+          'sigmatr-ui.js não foi encontrado',
+          'O HTML abriu, mas o arquivo da casca não está em nenhum dos caminhos procurados.',
+          ['Estrutura esperada:', '  sigmatr-ui.js', '  login.html', '  ativar.html',
+           '  shell.html', '  treinando/inicio.html', '',
+           'E sirva por HTTP, não por file:// —', '  python3 -m http.server 8000',
+           '  http://localhost:8000/login.html'].join('\n'));
+        var s = document.createElement('script');
+        s.src = vias.shift();
+        s.onerror = tenta;
+        s.onload = function () {
+          if (!window.SigmaTR) return panico('sigmatr-ui.js carregou, mas não definiu SigmaTR',
+            'O arquivo pode ter vindo truncado no download.', 'Baixe o sigmatr-ui.js de novo.');
+          if (!window.supabase) return panico('supabase-js não carregou',
+            'O CDN foi bloqueado (rede fechada ou offline). A casca precisa dele antes de montar.',
+            '&lt;script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"&gt;&lt;/script&gt;');
+          pagina();
+        };
+        document.head.appendChild(s);
+      })();
+    };
+  })();
+  </script>
   <script>
   /* ─── banco de provas: qual superfície montar ────────────────────────────
      ?s=painel | frente | verificacao  ·  acrescente &debug para a auditoria    */
@@ -45,7 +85,7 @@
     ]
   };
 
-  (async () => {
+  STBOOT(async () => {
     await SigmaTR.init({
       demo: true,                               // não fala com o banco nesta página
       superficie: S,
@@ -188,7 +228,7 @@
         text-decoration:none;color:${x===S?'#fff':'#94A3B8'};background:${x===S?'#0F4CBA':'transparent'}">${x}</a>`
     ).join('');
     document.body.appendChild(sw);
-  })();
+  });
   </script>
 </body>
 </html>
