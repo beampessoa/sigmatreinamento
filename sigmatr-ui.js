@@ -1,0 +1,832 @@
+/* ============================================================================
+   SIGMA TREINAMENTOS — sigmatr-ui.js  v1.0.0
+   Casca única. CSS injetado pelo JS. Não existe .css. Nenhum logo em base64.
+
+   Herda os tokens do esigma-ui.js v2.0. Prefixo st- (o E-SIGMA usa es-).
+
+   TRÊS SUPERFÍCIES, TRÊS MONTADORES — não é uma casca com variações:
+     painel      admin      desktop   header + sidebar escura
+     frente      treinando  celular   header, SEM menu, Trilho no topo
+     verificacao público    QR/pátio  SEM header. A página É a tarja.
+
+   OS 3 ERROS DE CASCA — mortos na raiz:
+     1. Casca ausente falhando em silêncio  → sem #app = tela de pânico + throw
+     2. Classe duplicada (class="header es-header") → a casca CRIA header/sidebar.
+        A página nunca escreve classe da casca.
+     3. grid-area faltando → o grid mora AQUI, não na página.
+     SigmaTR.auditar() confere os três. Roda sozinho em ?debug.
+
+   USO:
+     <body data-shell="frente" data-pagina="inicio">
+       <div id="app"></div>
+       <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+       <script src="sigmatr-ui.js"></script>
+       <script>SigmaTR.init({ titulo:'Meus treinamentos' });</script>
+     </body>
+============================================================================ */
+
+const SigmaTR = (() => {
+  'use strict';
+
+  const VERSAO = '1.0.0';
+
+  /* ══ 1. CONFIGURAÇÃO ═════════════════════════════════════════════════════ */
+  const CFG = {
+    url:    'https://SEU-PROJETO.supabase.co',   // ← preencher
+    key:    'SUA-ANON-KEY',                      // ← preencher
+    schema: 'sigmatr',                           // Exposed schemas: adicionar sigmatr
+    fn:     '/.netlify/functions'                // base dos serverless
+  };
+
+  /* ══ 2. MARCA ════════════════════════════════════════════════════════════
+     Fonte única. Trocar logo = trocar URL do bucket. Nunca base64, nunca <img>
+     escrito em página. Superfície pública = SÓ SIGMA CODE (regra Projeto Campo).
+     GCB entra em texto até a autorização de uso de marca sair — e aí vira 1 linha. */
+  const BRAND = {
+    emissor:      { nome:'SIGMA CODE', logo:'https://SEU-PROJETO.supabase.co/storage/v1/object/public/LOGO-Empresas/sigmacode.svg' },
+    produto:      'Treinamentos',
+    contratante:  { nome:'GCB Manutenção Industrial', logo:null, texto:'Contrato SAP 4600686554' },
+    // vira { logo:'.../gcb.svg' } no dia em que a autorização sair. Só esta linha.
+    publico:      { mostrarContratante:false }
+  };
+
+  /* ══ 3. LINGUAGEM — Onda 1 ═══════════════════════════════════════════════
+     O treinando não faz um curso. Ele é liberado para a área.
+     Os valores internos (apto/inapto_revisao/...) NÃO mudam no banco — são
+     contrato de integração com o E-SIGMA. A tradução vive aqui, na borda. */
+  const ROTULO = {
+    status: {
+      apto:               { palavra:'Liberado',        glifo:'✓', tom:'ok'    },
+      vence_em_breve:     { palavra:'Vence em breve',  glifo:'!', tom:'aviso' },
+      apto_com_pendencia: { palavra:'Liberado · em carência', glifo:'!', tom:'aviso' },
+      inapto_revisao:     { palavra:'Revisão nova',    glifo:'↻', tom:'erro'  },
+      inapto_vencido:     { palavra:'Vencido',         glifo:'✕', tom:'erro'  },
+      nunca_fez:          { palavra:'Não iniciado',    glifo:'–', tom:'neutro'},
+      reprovado:          { palavra:'Não atingiu a nota mínima', glifo:'–', tom:'neutro' }
+    },
+    verbo: {
+      concluido:  'liberado',
+      curso:      'procedimento',
+      aula:       'treinamento',
+      certificado:'selo',
+      retomar:    'Continuar de onde parou',
+      iniciar:    'Iniciar liberação'
+    }
+  };
+
+  const rotular = (s) => ROTULO.status[s] || ROTULO.status.nunca_fez;
+
+  /* ══ 4. CSS ══════════════════════════════════════════════════════════════
+     Tokens exatos do E-SIGMA. O grid mora aqui (erro 3). */
+  const CSS = `
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800&display=swap');
+
+:root{
+  --st-primaria:#0F4CBA; --st-primaria-2:#0B3A91;
+  --st-ok:#22C55E; --st-ok-forte:#15803D;
+  --st-aviso:#F59E0B; --st-aviso-forte:#B45309;
+  --st-erro:#EF4444; --st-erro-forte:#B91C1C;
+  --st-tinta:#1F2937; --st-tinta-2:#6B7280; --st-tinta-3:#9CA3AF;
+  --st-linha:#E5E7EB; --st-fundo:#F5F7FA; --st-papel:#FFFFFF;
+  --st-side-a:#1F2937; --st-side-b:#141B26; --st-side-item:#CBD5E1;
+  --st-sombra:0 1px 2px rgba(16,24,40,.06);
+  --st-sombra-2:0 4px 12px rgba(16,24,40,.10);
+  --st-r:8px; --st-header:64px; --st-side:248px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  font-family:'Exo 2',-apple-system,'Segoe UI',sans-serif;
+  background:var(--st-fundo); color:var(--st-tinta);
+  -webkit-font-smoothing:antialiased;
+}
+input,select,textarea{font-family:inherit;font-size:16px} /* <16px = iOS dá zoom */
+button{font-family:inherit;cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ── GRID DA CASCA (erro 3: mora aqui, não na página) ────────────────────── */
+.st-shell--painel{
+  display:grid; min-height:100vh;
+  grid-template-columns:var(--st-side) 1fr;
+  grid-template-rows:var(--st-header) 1fr;
+  grid-template-areas:"hd hd" "sb main";
+}
+.st-shell--painel > .st-header{grid-area:hd}
+.st-shell--painel > .st-side{grid-area:sb}
+.st-shell--painel > .st-main{grid-area:main}
+
+.st-shell--frente{
+  display:grid; min-height:100vh;
+  grid-template-columns:1fr;
+  grid-template-rows:var(--st-header) auto 1fr;
+  grid-template-areas:"hd" "trilho" "main";
+}
+.st-shell--frente > .st-header{grid-area:hd}
+.st-shell--frente > .st-trilho{grid-area:trilho}
+.st-shell--frente > .st-main{grid-area:main}
+
+.st-shell--verificacao{
+  display:grid; min-height:100vh; grid-template-rows:1fr auto;
+  grid-template-areas:"veredito" "proc";
+}
+.st-shell--verificacao > .st-veredito{grid-area:veredito}
+.st-shell--verificacao > .st-proc{grid-area:proc}
+
+@media(max-width:900px){
+  .st-shell--painel{grid-template-columns:1fr; grid-template-areas:"hd" "main"}
+  .st-shell--painel > .st-side{
+    position:fixed; top:var(--st-header); bottom:0; left:0; width:var(--st-side);
+    transform:translateX(-100%); transition:transform .18s ease; z-index:40;
+  }
+  .st-shell--painel.st-side-aberta > .st-side{transform:none}
+  .st-burger{display:flex!important}
+}
+
+/* ── HEADER ──────────────────────────────────────────────────────────────── */
+.st-header{
+  position:sticky; top:0; z-index:50; height:var(--st-header);
+  display:flex; align-items:center; gap:14px; padding:0 20px;
+  background:#fff; border-bottom:1px solid var(--st-linha); box-shadow:var(--st-sombra);
+}
+.st-logo{height:32px; width:58px; object-fit:contain; display:block}
+.st-marca-txt{
+  font-size:13px; font-weight:800; letter-spacing:.6px; color:var(--st-primaria-2);
+  white-space:nowrap; flex:none;
+}
+.st-sep{width:1px; height:28px; background:var(--st-linha); flex:none}
+.st-tit{font-size:15px; font-weight:700; color:var(--st-tinta); line-height:1.15}
+.st-sub{font-size:12px; color:var(--st-tinta-2); line-height:1.15; margin-top:1px}
+.st-cabeca{min-width:0}
+.st-cabeca .st-tit,.st-cabeca .st-sub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.st-espaco{flex:1}
+.st-burger{
+  display:none; align-items:center; justify-content:center; width:36px; height:36px;
+  border:1px solid var(--st-linha); background:#fff; border-radius:var(--st-r); font-size:16px;
+}
+.st-pilula{
+  display:flex; align-items:center; gap:8px; padding:4px 10px 4px 4px;
+  border:1px solid var(--st-linha); border-radius:999px; background:#fff;
+}
+.st-avatar{
+  width:30px; height:30px; border-radius:999px; flex:none;
+  background:linear-gradient(135deg,var(--st-primaria),var(--st-primaria-2));
+  color:#fff; font-size:11px; font-weight:700;
+  display:flex; align-items:center; justify-content:center; letter-spacing:.3px;
+}
+.st-pilula b{font-size:12.5px; font-weight:600; color:var(--st-tinta)}
+.st-pilula small{display:block; font-size:11px; color:var(--st-tinta-2); font-weight:500}
+.st-menu{
+  position:absolute; top:56px; right:20px; width:210px; background:#fff; z-index:60;
+  border:1px solid var(--st-linha); border-radius:10px; box-shadow:var(--st-sombra-2);
+  padding:6px; display:none;
+}
+.st-menu.aberto{display:block}
+.st-menu button{
+  width:100%; text-align:left; padding:9px 10px; border:0; background:none;
+  border-radius:6px; font-size:13px; color:var(--st-tinta);
+}
+.st-menu button:hover{background:var(--st-fundo)}
+
+/* ── SIDEBAR ─────────────────────────────────────────────────────────────── */
+.st-side{
+  background:linear-gradient(180deg,var(--st-side-a),var(--st-side-b));
+  padding:14px 10px; overflow-y:auto;
+}
+.st-side-grupo{
+  font-size:10.5px; font-weight:700; letter-spacing:.9px; text-transform:uppercase;
+  color:#64748B; padding:14px 12px 6px;
+}
+.st-side a{
+  display:flex; align-items:center; gap:10px; position:relative;
+  padding:9px 12px; margin:2px 0; border-radius:var(--st-r);
+  color:var(--st-side-item); font-size:13.5px; font-weight:500; text-decoration:none;
+}
+.st-side a:hover{background:rgba(255,255,255,.06); color:#fff}
+.st-side a.ativo{
+  background:linear-gradient(90deg,rgba(15,76,186,.9),rgba(15,76,186,.5));
+  color:#fff; font-weight:600;
+}
+.st-side a.ativo::before{
+  content:''; position:absolute; left:0; top:6px; bottom:6px;
+  width:4px; border-radius:0 3px 3px 0; background:var(--st-ok);
+}
+.st-side .ic{width:16px; text-align:center; opacity:.9; font-size:14px}
+.st-side-rodape{
+  margin-top:18px; padding:12px; border-top:1px solid rgba(255,255,255,.08);
+  color:#64748B; font-size:10.5px; line-height:1.5;
+}
+
+/* ── MAIN ────────────────────────────────────────────────────────────────── */
+.st-main{padding:22px; min-width:0}
+.st-shell--frente .st-main{padding:16px; max-width:560px; margin:0 auto; width:100%}
+.st-cartao{
+  background:var(--st-papel); border:1px solid var(--st-linha);
+  border-radius:12px; box-shadow:var(--st-sombra); padding:16px;
+}
+
+/* ── TARJA (palavra + forma + cor — nunca cor sozinha) ───────────────────── */
+.st-tarja{
+  display:inline-flex; align-items:center; gap:6px; padding:3px 10px;
+  border-radius:999px; font-size:12px; font-weight:600; border:1px solid;
+  white-space:nowrap;
+}
+.st-tarja .g{font-size:11px; font-weight:800}
+.st-tarja--ok{background:#ECFDF3; color:#15803D; border-color:#A7F3C6}
+.st-tarja--aviso{background:#FFFAEB; color:#B45309; border-color:#FDE68A}
+.st-tarja--erro{background:#FEF3F2; color:#B91C1C; border-color:#FECACA}
+.st-tarja--neutro{background:#F3F4F6; color:#4B5563; border-color:#E5E7EB}
+
+/* ── TRILHO DE LIBERAÇÃO (segmentos, não porcentagem) ────────────────────── */
+.st-trilho{
+  background:#fff; border-bottom:1px solid var(--st-linha);
+  padding:12px 16px 14px; position:sticky; top:var(--st-header); z-index:30;
+}
+.st-trilho-topo{
+  display:flex; align-items:baseline; justify-content:space-between; margin-bottom:8px;
+}
+.st-trilho-cont{font-size:14px; font-weight:700; color:var(--st-tinta)}
+.st-trilho-cont b{color:var(--st-primaria)}
+.st-trilho-meta{font-size:11.5px; color:var(--st-tinta-2)}
+.st-segs{display:flex; gap:4px}
+.st-seg{
+  flex:1; height:6px; border-radius:3px; background:#E5E7EB; position:relative;
+}
+.st-seg--ok{background:var(--st-ok)}
+.st-seg--agora{background:var(--st-primaria)}
+.st-seg--agora::after{
+  content:''; position:absolute; inset:-3px -2px; border-radius:5px;
+  border:2px solid rgba(15,76,186,.25);
+}
+.st-seg--bloq{background:#E5E7EB}
+
+/* ── AGORA (a única pergunta da Field Surface) ───────────────────────────── */
+.st-agora{
+  background:var(--st-papel); border:1px solid var(--st-linha);
+  border-left:4px solid var(--st-primaria);
+  border-radius:12px; box-shadow:var(--st-sombra); padding:18px; margin-bottom:14px;
+}
+.st-agora-olho{
+  font-size:10.5px; font-weight:700; letter-spacing:1px; text-transform:uppercase;
+  color:var(--st-tinta-3); margin-bottom:6px;
+}
+.st-agora h2{margin:0 0 4px; font-size:19px; font-weight:700; line-height:1.25}
+.st-agora p{margin:0 0 14px; font-size:13.5px; color:var(--st-tinta-2); line-height:1.45}
+.st-btn{
+  display:inline-flex; align-items:center; justify-content:center; gap:8px;
+  padding:13px 18px; min-height:48px; border:0; border-radius:var(--st-r);
+  background:linear-gradient(180deg,var(--st-primaria),var(--st-primaria-2));
+  color:#fff; font-size:15px; font-weight:600; width:100%;
+}
+.st-btn:active{transform:translateY(1px)}
+.st-btn--fantasma{
+  background:#fff; color:var(--st-tinta); border:1px solid var(--st-linha);
+}
+.st-btn--perigo{background:linear-gradient(180deg,#EF4444,#B91C1C)}
+.st-btn:disabled{opacity:.5}
+
+/* ── LINHA DE PROCEDIMENTO (a cadeia de controle, sem propaganda) ────────── */
+.st-proc{
+  padding:10px 16px; background:#fff; border-top:1px solid var(--st-linha);
+  font-size:11px; line-height:1.55; color:var(--st-tinta-2);
+  display:flex; flex-wrap:wrap; gap:4px 10px; align-items:center;
+}
+.st-proc code{
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:10.5px;
+  background:var(--st-fundo); border:1px solid var(--st-linha);
+  border-radius:4px; padding:1px 5px; color:var(--st-tinta);
+}
+.st-proc .pt{color:var(--st-tinta-3)}
+
+/* ── VERIFICAÇÃO PÚBLICA (sol · 1 segundo · sem header) ──────────────────── */
+.st-veredito{
+  display:flex; flex-direction:column; justify-content:center;
+  padding:28px 22px; color:#fff; text-align:left;
+}
+.st-veredito--ok{background:var(--st-ok-forte)}
+.st-veredito--aviso{background:var(--st-aviso-forte)}
+.st-veredito--erro{background:var(--st-erro-forte)}
+.st-veredito--neutro{background:#374151}
+.st-palavra{
+  font-size:clamp(46px,17vw,78px); font-weight:800; letter-spacing:-1.5px;
+  line-height:.95; margin:0; text-transform:uppercase;
+}
+.st-veredito .glifo{
+  font-size:34px; font-weight:800; opacity:.85; display:block; margin-bottom:6px;
+}
+.st-veredito .quem{
+  margin-top:20px; padding-top:16px; border-top:1px solid rgba(255,255,255,.28);
+}
+.st-veredito .quem b{display:block; font-size:20px; font-weight:700}
+.st-veredito .quem span{font-size:13.5px; opacity:.9}
+.st-veredito .itens{margin-top:16px; display:flex; flex-direction:column; gap:7px}
+.st-veredito .item{
+  display:flex; justify-content:space-between; gap:12px; align-items:center;
+  font-size:13.5px; padding:8px 11px; border-radius:6px; background:rgba(255,255,255,.13);
+}
+.st-veredito .item i{font-style:normal; font-weight:700; opacity:.95}
+.st-carimbo{
+  margin-top:18px; font-size:11.5px; opacity:.85;
+  font-family:ui-monospace,SFMono-Regular,Menlo,monospace;
+}
+.st-marca-pub{
+  margin-top:14px; display:flex; align-items:center; gap:8px;
+  font-size:11px; letter-spacing:.5px; opacity:.9; text-transform:uppercase; font-weight:600;
+}
+
+/* ── TOAST / MODAL / VAZIO ───────────────────────────────────────────────── */
+.st-toasts{position:fixed; left:0; right:0; bottom:16px; z-index:90; display:flex;
+  flex-direction:column; align-items:center; gap:8px; pointer-events:none; padding:0 16px}
+.st-toast{
+  background:var(--st-tinta); color:#fff; padding:11px 15px; border-radius:10px;
+  font-size:13px; box-shadow:var(--st-sombra-2); max-width:420px;
+  animation:st-sobe .16s ease;
+}
+.st-toast--erro{background:var(--st-erro-forte)}
+.st-toast--ok{background:var(--st-ok-forte)}
+@keyframes st-sobe{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+.st-veu{
+  position:fixed; inset:0; z-index:100; background:rgba(16,24,40,.55);
+  display:flex; align-items:center; justify-content:center; padding:18px;
+}
+.st-modal{
+  background:#fff; border-radius:14px; box-shadow:var(--st-sombra-2);
+  width:100%; max-width:460px; padding:20px;
+}
+.st-modal h3{margin:0 0 6px; font-size:17px; font-weight:700}
+.st-modal p{margin:0 0 12px; font-size:13.5px; color:var(--st-tinta-2); line-height:1.5}
+.st-impacto{
+  background:#FFFAEB; border:1px solid #FDE68A; border-radius:10px;
+  padding:12px 14px; margin-bottom:14px; font-size:13.5px; line-height:1.6; color:#7C2D12;
+}
+.st-impacto b{color:#7C2D12}
+.st-impacto .grave{
+  display:block; margin-top:6px; font-weight:700; color:var(--st-erro-forte);
+}
+.st-impacto--cego{background:#FEF3F2; border-color:#FECACA; color:#B91C1C}
+.st-modal-acoes{display:flex; gap:8px}
+.st-modal-acoes .st-btn{width:auto; flex:1}
+
+.st-vazio{
+  text-align:center; padding:40px 20px; color:var(--st-tinta-2);
+  border:1px dashed var(--st-linha); border-radius:12px; background:#fff;
+}
+.st-vazio b{display:block; color:var(--st-tinta); font-size:15px; margin-bottom:4px}
+.st-vazio p{margin:0 0 14px; font-size:13.5px}
+
+/* ── SINAL FRACO ─────────────────────────────────────────────────────────── */
+.st-faixa-rede{
+  position:fixed; left:0; right:0; bottom:0; z-index:80;
+  background:var(--st-aviso-forte); color:#fff; text-align:center;
+  padding:9px 14px; font-size:13px; font-weight:600;
+}
+
+/* ── PÂNICO (erro 1: nunca mais em silêncio) ─────────────────────────────── */
+.st-panico{
+  position:fixed; inset:0; z-index:9999; background:#B91C1C; color:#fff;
+  padding:26px; font-family:'Exo 2',sans-serif; overflow:auto;
+}
+.st-panico h1{font-size:22px; margin:0 0 10px}
+.st-panico code{
+  display:block; background:rgba(0,0,0,.3); padding:12px; border-radius:8px;
+  font-family:ui-monospace,monospace; font-size:12.5px; margin-top:12px; white-space:pre;
+}
+`;
+
+  /* ══ 5. INFRA ════════════════════════════════════════════════════════════ */
+  let db = null, sessaoAtual = null, superficieAtual = null;
+
+  function injetarCSS(){
+    if (document.getElementById('st-css')) return;
+    const s = document.createElement('style');
+    s.id = 'st-css'; s.textContent = CSS;
+    document.head.appendChild(s);
+  }
+
+  function panico(titulo, detalhe, comoArrumar){
+    injetarCSS();
+    const d = document.createElement('div');
+    d.className = 'st-panico';
+    d.innerHTML = `<h1>Casca não montou — ${esc(titulo)}</h1>
+      <p>${esc(detalhe)}</p><code>${esc(comoArrumar)}</code>`;
+    document.body.appendChild(d);
+    throw new Error(`[SigmaTR] ${titulo} — ${detalhe}`);
+  }
+
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g,
+    c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  const iniciais = (n) => String(n||'?').trim().split(/\s+/)
+    .slice(0,2).map(p=>p[0]).join('').toUpperCase();
+
+  /* ── formatação ─────────────────────────────────────────────────────────── */
+  const fmt = {
+    cpf: (v) => String(v||'').replace(/\D/g,'')
+      .replace(/(\d{3})(\d{3})(\d{3})(\d{2})/,'$1.$2.$3-$4'),
+    cpfParcial: (v) => {              // LGPD: ninguém precisa dos 11 dígitos
+      const d = String(v||'').replace(/\D/g,'');
+      return d.length === 11 ? `•••.•••.${d.slice(6,9)}-${d.slice(9)}` : '•••.•••.•••-••';
+    },
+    data: (iso) => iso ? new Date(iso).toLocaleDateString('pt-BR',{timeZone:'America/Sao_Paulo'}) : '—',
+    dataHora: (iso) => iso ? new Date(iso).toLocaleString('pt-BR',
+      {timeZone:'America/Sao_Paulo', day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit'}) : '—',
+    tempo: (s) => { s = Math.max(0, Math.round(s||0));
+      return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`; }
+  };
+  const mascararCPF = fmt.cpfParcial;
+
+  /* ══ 6. SUPABASE ═════════════════════════════════════════════════════════ */
+  function conectar(){
+    if (db) return db;
+    if (!window.supabase) panico('supabase-js ausente',
+      'A casca precisa do cliente Supabase antes do sigmatr-ui.js.',
+      '<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>\n<script src="sigmatr-ui.js"></script>');
+    db = window.supabase.createClient(CFG.url, CFG.key, {
+      db: { schema: CFG.schema },
+      auth: { persistSession:true, autoRefreshToken:true }
+    });
+    return db;
+  }
+
+  const papel = (s) => s?.user?.app_metadata?.roles?.sigmatr || null; // namespaced
+
+  async function sessao(){
+    const { data } = await conectar().auth.getSession();
+    sessaoAtual = data.session;
+    return sessaoAtual;
+  }
+
+  const auth = {
+    enviarCodigo: (email) => conectar().auth.signInWithOtp({
+      email, options:{ shouldCreateUser:false }        // OTP 6 dígitos, não magic link
+    }),
+    confirmarCodigo: (email, token) => conectar().auth.verifyOtp({ email, token, type:'email' }),
+    sair: async () => { await conectar().auth.signOut(); location.href = '/login.html'; }
+  };
+
+  /* chamadas ao banco sempre por FUNÇÃO — nunca select direto na view
+     (view roda com privilégio do dono; SELECT em vw_aptidao_pessoa vaza todo mundo) */
+  const rpc = {
+    minhaFicha:    ()      => conectar().rpc('minha_ficha'),
+    painelAptidao: (args)  => conectar().rpc('painel_aptidao', args || {}),
+    impacto:       (rev)   => conectar().rpc('impacto_revisao', { p_revisao_id: rev }),
+    publicar:      (rev,c) => conectar().rpc('publicar_revisao', { p_revisao_id: rev, p_carencia_dias: c })
+  };
+
+  /* ══ 7. COMPONENTES ══════════════════════════════════════════════════════ */
+
+  /** tarja(status) — palavra + forma + cor. Nunca cor sozinha (daltonismo é comum em obra). */
+  function tarja(status){
+    const r = rotular(status);
+    return `<span class="st-tarja st-tarja--${r.tom}"><span class="g">${r.glifo}</span>${esc(r.palavra)}</span>`;
+  }
+
+  /** validade(iso) — "vence em 9 dias". Vira aviso a 30 dias, erro depois de vencer. */
+  function validade(valido_ate){
+    if (!valido_ate) return '';
+    const hoje = new Date(); hoje.setHours(0,0,0,0);
+    const fim  = new Date(valido_ate); fim.setHours(23,59,59,999); // vence no FIM do dia em SP
+    const dias = Math.ceil((fim - hoje) / 86400000);
+    if (dias < 0)   return `<span class="st-tarja st-tarja--erro"><span class="g">✕</span>Vencido em ${fmt.data(valido_ate)}</span>`;
+    if (dias <= 30) return `<span class="st-tarja st-tarja--aviso"><span class="g">!</span>Vence em ${dias} dia${dias===1?'':'s'}</span>`;
+    return `<span class="st-tarja st-tarja--ok"><span class="g">✓</span>Válido até ${fmt.data(valido_ate)}</span>`;
+  }
+
+  /** trilho — "4 de 6 liberados". Segmentos, não porcentagem: cada um é um procedimento. */
+  function trilho({ itens = [], funcao = '' } = {}){
+    const ok = itens.filter(i => i.status === 'apto' || i.status === 'apto_com_pendencia').length;
+    const segs = itens.map(i => {
+      const cls = (i.status==='apto'||i.status==='apto_com_pendencia') ? 'st-seg--ok'
+                : i.agora ? 'st-seg--agora' : 'st-seg--bloq';
+      return `<div class="st-seg ${cls}" title="${esc(i.titulo||'')}"></div>`;
+    }).join('');
+    return `<div class="st-trilho">
+      <div class="st-trilho-topo">
+        <div class="st-trilho-cont"><b>${ok}</b> de ${itens.length} liberados</div>
+        <div class="st-trilho-meta">${esc(funcao || 'Trilho de liberação')}</div>
+      </div>
+      <div class="st-segs">${segs || '<div class="st-seg"></div>'}</div>
+    </div>`;
+  }
+
+  /** agora — o cartão que responde "o que preciso fazer agora?". Nada compete com ele. */
+  function agora({ olho = 'Próximo passo', titulo, texto, acao, href, bloqueado = false }){
+    return `<div class="st-agora">
+      <div class="st-agora-olho">${esc(olho)}</div>
+      <h2>${esc(titulo)}</h2>
+      <p>${esc(texto)}</p>
+      <button class="st-btn" ${bloqueado?'disabled':''} data-ir="${esc(href||'')}">${esc(acao)}</button>
+    </div>`;
+  }
+
+  /** procedencia — a cadeia de controle do CQ-GCB, dita pela própria interface.
+      Sem logotipo, sem propaganda: rastreabilidade impressa no rodapé. */
+  function procedencia({ codigo, revisao, publicado_em, emitido_por = 'Controle da Qualidade · GCB' }){
+    return `<div class="st-proc">
+      <span>Procedimento <code>${esc(codigo||'—')}</code></span><span class="pt">·</span>
+      <span>Revisão <code>${esc(revisao||'—')}</code></span><span class="pt">·</span>
+      <span>Publicada em ${fmt.data(publicado_em)}</span><span class="pt">·</span>
+      <span>Revisada e liberada por ${esc(emitido_por)}</span>
+    </div>`;
+  }
+
+  /** confirmar({impacto}) — publicar revisão não é UPDATE. Preview de impacto obrigatório.
+      completo=false → "impacto indisponível". Zero e desconhecido não são a mesma coisa. */
+  function confirmar({ titulo, texto, impacto = null, acao = 'Confirmar', perigo = false }){
+    return new Promise((resolve) => {
+      const veu = document.createElement('div');
+      veu.className = 'st-veu';
+      let bloco = '';
+      if (impacto && impacto.completo === false){
+        bloco = `<div class="st-impacto st-impacto--cego">
+          <b>Impacto indisponível.</b> O sistema não conseguiu calcular quem será afetado.
+          Não publique às cegas — tente de novo em instantes.</div>`;
+      } else if (impacto){
+        bloco = `<div class="st-impacto">
+          <b>${impacto.afetados ?? 0} pessoas</b> ficarão inaptas.
+          ${impacto.mobilizados ? `<span class="grave">${impacto.mobilizados} estão mobilizadas AGORA.</span>` : ''}
+          Carência: ${impacto.carencia_dias ?? 15} dias.</div>`;
+      }
+      const cego = impacto && impacto.completo === false;
+      veu.innerHTML = `<div class="st-modal" role="dialog" aria-modal="true">
+        <h3>${esc(titulo)}</h3>
+        <p>${esc(texto)}</p>${bloco}
+        <div class="st-modal-acoes">
+          <button class="st-btn st-btn--fantasma" data-x="0">Cancelar</button>
+          <button class="st-btn ${perigo?'st-btn--perigo':''}" data-x="1" ${cego?'disabled':''}>${esc(acao)}</button>
+        </div></div>`;
+      veu.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-x]');
+        if (!b && e.target !== veu) return;
+        veu.remove(); resolve(b ? b.dataset.x === '1' : false);
+      });
+      document.body.appendChild(veu);
+      veu.querySelector('[data-x="1"]').focus();
+    });
+  }
+
+  function toast(msg, tipo = ''){
+    let caixa = document.querySelector('.st-toasts');
+    if (!caixa){ caixa = document.createElement('div'); caixa.className = 'st-toasts'; document.body.appendChild(caixa); }
+    const t = document.createElement('div');
+    t.className = `st-toast ${tipo?`st-toast--${tipo}`:''}`;
+    t.setAttribute('role','status'); t.textContent = msg;
+    caixa.appendChild(t);
+    setTimeout(() => t.remove(), 4200);
+  }
+
+  /** vazio() — tela vazia é convite para agir, não recado de erro. */
+  function vazio({ titulo, texto, acao, href }){
+    return `<div class="st-vazio"><b>${esc(titulo)}</b><p>${esc(texto)}</p>
+      ${acao ? `<button class="st-btn" style="width:auto;padding:10px 18px" data-ir="${esc(href||'')}">${esc(acao)}</button>` : ''}
+    </div>`;
+  }
+
+  /** sinalFraco() — heartbeat caiu por rede. O progresso está guardado. Dizer isso. */
+  let faixa = null;
+  function sinalFraco(ligado){
+    if (ligado && !faixa){
+      faixa = document.createElement('div');
+      faixa.className = 'st-faixa-rede'; faixa.setAttribute('role','status');
+      faixa.textContent = 'Sinal fraco. Seu progresso está guardado.';
+      document.body.appendChild(faixa);
+    } else if (!ligado && faixa){ faixa.remove(); faixa = null; }
+  }
+
+  /* ══ 8. PEÇAS DA CASCA ═══════════════════════════════════════════════════ */
+  function pecaHeader({ titulo, subtitulo, usuario, burger = false }){
+    const hd = document.createElement('header');
+    hd.className = 'st-header';                    // a CASCA cria (erro 2)
+    hd.innerHTML = `
+      ${burger ? '<button class="st-burger" aria-label="Menu" data-burger>☰</button>' : ''}
+      <img class="st-logo" src="${esc(BRAND.emissor.logo)}" alt="${esc(BRAND.emissor.nome)}"
+           onerror="this.outerHTML='<span class=&quot;st-marca-txt&quot;>SIGMA CODE</span>'">
+      <div class="st-sep"></div>
+      <div class="st-cabeca">
+        <div class="st-tit">${esc(titulo || BRAND.produto)}</div>
+        <div class="st-sub">${esc(subtitulo || BRAND.contratante.nome)}</div>
+      </div>
+      <div class="st-espaco"></div>
+      ${usuario ? `
+        <button class="st-pilula" data-pilula aria-haspopup="menu">
+          <span class="st-avatar">${esc(iniciais(usuario.nome))}</span>
+          <span><b>${esc((usuario.nome||'').split(' ')[0])}</b>
+            <small>${esc(usuario.funcao || (usuario.papel==='admin'?'Administrador':'Treinando'))}</small></span>
+        </button>
+        <div class="st-menu" data-menu role="menu">
+          <button data-ir="/treinando/selo.html">Meus selos</button>
+          <button data-sair>Sair</button>
+        </div>` : ''}`;
+    return hd;
+  }
+
+  const NAV = [
+    { grupo:'Aptidão', itens:[
+      { ic:'▦', txt:'Aderência',    href:'/admin/aderencia.html',   id:'aderencia' },
+      { ic:'⏳', txt:'Vencendo',     href:'/admin/vencendo.html',    id:'vencendo'  },
+      { ic:'▶', txt:'Mobilizar',    href:'/admin/mobilizar.html',   id:'mobilizar' }
+    ]},
+    { grupo:'Pessoas', itens:[
+      { ic:'☰', txt:'Pessoas',      href:'/admin/pessoas.html',     id:'pessoas'   },
+      { ic:'↑', txt:'Importar',     href:'/admin/importar.html',    id:'importar'  },
+      { ic:'◆', txt:'Funções',      href:'/admin/funcoes.html',     id:'funcoes'   },
+      { ic:'⊞', txt:'Matriz',       href:'/admin/matriz.html',      id:'matriz'    }
+    ]},
+    { grupo:'Procedimentos', itens:[
+      { ic:'▤', txt:'Treinamentos', href:'/admin/treinamentos.html',id:'treinamentos' },
+      { ic:'↻', txt:'Revisões',     href:'/admin/revisoes.html',    id:'revisoes'  },
+      { ic:'✎', txt:'Provas',       href:'/admin/provas.html',      id:'provas'    }
+    ]}
+  ];
+
+  function pecaSidebar(pagina){
+    const sb = document.createElement('nav');
+    sb.className = 'st-side';                       // a CASCA cria (erro 2)
+    sb.innerHTML = NAV.map(g => `
+      <div class="st-side-grupo">${esc(g.grupo)}</div>
+      ${g.itens.map(i => `<a href="${esc(i.href)}" class="${i.id===pagina?'ativo':''}"
+          ${i.id===pagina?'aria-current="page"':''}><span class="ic">${i.ic}</span>${esc(i.txt)}</a>`).join('')}
+    `).join('') + `
+      <div class="st-side-rodape">
+        ${esc(BRAND.contratante.nome)}<br>${esc(BRAND.contratante.texto)}<br>
+        SIGMA TREINAMENTOS v${VERSAO}
+      </div>`;
+    return sb;
+  }
+
+  /* ══ 9. OS TRÊS MONTADORES ═══════════════════════════════════════════════ */
+
+  /** PAINEL — admin, desktop. Produtividade: densidade, sidebar, atalhos. */
+  function montarPainel(app, o){
+    document.body.classList.add('st-shell','st-shell--painel');
+    app.classList.add('st-main');
+    document.body.insertBefore(pecaHeader({ ...o, burger:true }), app);
+    document.body.insertBefore(pecaSidebar(o.pagina), app);
+  }
+
+  /** FRENTE — treinando, celular, refinaria. Sem menu. Uma pergunta: o que faço agora?
+      O Trilho fica no topo e é a única navegação: o sistema decide o próximo passo. */
+  function montarFrente(app, o){
+    document.body.classList.add('st-shell','st-shell--frente');
+    app.classList.add('st-main');
+    document.body.insertBefore(pecaHeader({ ...o, burger:false }), app);
+    const t = document.createElement('div');
+    t.className = 'st-trilho-slot';                 // preenchido por SigmaTR.trilhar()
+    document.body.insertBefore(t, app);
+    if (o.trilho) trilhar(o.trilho);
+  }
+
+  /** trilhar({itens,funcao}) — atualiza o Trilho de Liberação da Frente. */
+  function trilhar(dados){
+    const slot = document.querySelector('.st-trilho-slot, .st-shell--frente > .st-trilho');
+    if (!slot) return;
+    const novo = document.createElement('div');
+    novo.innerHTML = trilho(dados);
+    const el = novo.firstElementChild;
+    el.classList.add('st-trilho');
+    slot.replaceWith(el);
+  }
+
+  /** VERIFICACAO — o fiscal, no pátio, no sol. Sem header, sem menu, sem navegação.
+      A primeira coisa na tela é a PALAVRA. A página é a tarja. */
+  function montarVerificacao(app, o){
+    document.body.classList.add('st-shell','st-shell--verificacao');
+    app.classList.add('st-veredito');
+    app.classList.add('st-veredito--neutro');
+    if (o.ficha) pintarFicha(o.ficha);
+  }
+
+  /** pintarFicha(f) — payload mínimo vindo do serverless (sem CPF, no-store). */
+  function pintarFicha(f){
+    const app = document.getElementById('app');
+    const r = rotular(f.status);
+    app.className = `st-veredito st-veredito--${r.tom}`;
+    const itens = (f.treinamentos || []).map(t => `
+      <div class="st-item item"><span>${esc(t.titulo)}</span>
+        <i>${esc(rotular(t.status).glifo)} ${esc(rotular(t.status).palavra)}</i></div>`).join('');
+    app.innerHTML = `
+      <span class="glifo">${esc(r.glifo)}</span>
+      <h1 class="st-palavra">${esc(f.status === 'apto' ? 'Apto' : (f.status === 'apto_com_pendencia' ? 'Apto' : 'Inapto'))}</h1>
+      <div class="quem">
+        <b>${esc(f.nome || '—')}</b>
+        <span>${esc(f.funcao || '')}${f.matricula ? ' · Matrícula ' + esc(f.matricula) : ''}</span>
+      </div>
+      <div class="itens">${itens}</div>
+      <div class="st-carimbo">Consultado em ${fmt.dataHora(new Date().toISOString())}</div>
+      <div class="st-marca-pub">${esc(BRAND.emissor.nome)}</div>`;   // público = só SIGMA CODE
+
+    const rod = document.querySelector('.st-proc');
+    if (rod) rod.remove();
+    const p = document.createElement('div');
+    p.innerHTML = procedencia({
+      codigo: f.procedimento_codigo, revisao: f.revisao,
+      publicado_em: f.publicado_em, emitido_por: f.emitido_por
+    });
+    const el = p.firstElementChild; el.classList.add('st-proc');
+    document.body.appendChild(el);
+  }
+
+  /* ══ 10. AUDITORIA DOS 3 ERROS ═══════════════════════════════════════════ */
+  function auditar(){
+    const r = [];
+    const app = document.getElementById('app');
+    r.push(app ? ['ok','1. Casca presente (#app encontrado)']
+               : ['ERRO','1. #app ausente — a casca não teria onde montar']);
+
+    // 2. a página não pode escrever classe da casca
+    const intrusos = [...document.querySelectorAll('[class*="st-header"],[class*="st-side"]')]
+      .filter(e => !e.dataset.stCasca);
+    const dupHeader = document.querySelectorAll('.st-header').length;
+    const dupSide   = document.querySelectorAll('.st-side').length;
+    r.push((dupHeader <= 1 && dupSide <= 1)
+      ? ['ok','2. Sem classe duplicada (header e sidebar criados só pela casca)']
+      : ['ERRO',`2. Duplicação: ${dupHeader} header(s), ${dupSide} sidebar(s)`]);
+
+    // 3. grid: as áreas têm de estar resolvidas pela casca, não pela página
+    const shell = document.body.classList.contains('st-shell');
+    const gridOk = shell && getComputedStyle(document.body).display === 'grid';
+    r.push(gridOk ? ['ok','3. Grid resolvido pela casca (grid-template-areas no ui.js)']
+                  : ['ERRO','3. Grid não aplicado — a página está tentando posicionar sozinha']);
+
+    console.group(`%cSigmaTR.auditar() · v${VERSAO} · superfície: ${superficieAtual}`,
+      'font-weight:700');
+    r.forEach(([s,m]) => console.log(`%c${s}%c  ${m}`,
+      `color:${s==='ok'?'#15803D':'#B91C1C'};font-weight:700`, 'color:inherit'));
+    console.groupEnd();
+    return r;
+  }
+
+  /* ══ 11. INIT ════════════════════════════════════════════════════════════ */
+  async function init(o = {}){
+    injetarCSS();
+
+    const app = document.getElementById('app');
+    if (!app) panico('#app não existe',                       // erro 1: nunca em silêncio
+      'A página precisa declarar o ponto de montagem. A casca não adivinha.',
+      '<body data-shell="frente">\n  <div id="app"></div>\n  <script src="sigmatr-ui.js"></script>\n</body>');
+
+    const sup = o.superficie || document.body.dataset.shell;
+    if (!['painel','frente','verificacao'].includes(sup)) panico('superfície inválida',
+      `data-shell="${sup ?? ''}" não é uma superfície. São três, e elas não se misturam.`,
+      'data-shell="painel"  → admin, desktop\ndata-shell="frente"      → treinando, celular\ndata-shell="verificacao"  → público, QR');
+    superficieAtual = sup;
+    o.pagina = o.pagina || document.body.dataset.pagina || '';
+
+    // público não autentica e não fala com o banco direto (serverless + service_role)
+    if (sup === 'verificacao'){ montarVerificacao(app, o); ligarCliques(); return { superficie:sup }; }
+
+    let s = o.demo ? null : await sessao();
+    if (!o.demo && !s){ location.href = '/login.html'; return; }
+
+    const pp = o.demo ? (sup === 'painel' ? 'admin' : 'treinando') : papel(s);
+    if (!pp){ panico('sem papel no SIGMA TREINAMENTOS',        // admin do E-SIGMA não é admin aqui
+      'O usuário está logado, mas não tem app_metadata.roles.sigmatr.',
+      "{ app_metadata: { roles: { sigmatr: 'treinando' } } }"); }
+    if (sup === 'painel' && pp !== 'admin'){ location.href = '/treinando/inicio.html'; return; }
+    if (sup === 'frente' && pp !== 'treinando' && pp !== 'admin'){ location.href = '/login.html'; return; }
+
+    const usuario = o.usuario || {
+      nome: s?.user?.user_metadata?.nome || s?.user?.email || 'Usuário',
+      papel: pp, funcao: o.funcao
+    };
+    o.usuario = usuario;
+
+    if (sup === 'painel') montarPainel(app, o); else montarFrente(app, o);
+    document.querySelectorAll('.st-header,.st-side').forEach(e => e.dataset.stCasca = '1');
+
+    ligarCliques();
+    window.addEventListener('online',  () => sinalFraco(false));
+    window.addEventListener('offline', () => sinalFraco(true));
+    if (!navigator.onLine) sinalFraco(true);
+
+    if (new URLSearchParams(location.search).has('debug')) auditar();
+    return { superficie:sup, papel:pp, usuario };
+  }
+
+  function ligarCliques(){
+    if (document.body.dataset.stCliques) return;
+    document.body.dataset.stCliques = '1';
+    document.addEventListener('click', (e) => {
+      const ir = e.target.closest('[data-ir]');
+      if (ir && ir.dataset.ir){ location.href = ir.dataset.ir; return; }
+      if (e.target.closest('[data-sair]')) { auth.sair(); return; }
+      if (e.target.closest('[data-burger]')) {
+        document.body.classList.toggle('st-side-aberta'); return;
+      }
+      const pil = e.target.closest('[data-pilula]');
+      const menu = document.querySelector('[data-menu]');
+      if (menu) menu.classList.toggle('aberto', !!pil && !menu.classList.contains('aberto'));
+    });
+  }
+
+  /* ══ 12. API PÚBLICA ═════════════════════════════════════════════════════ */
+  return {
+    VERSAO, BRAND, ROTULO, CFG,
+    init, auditar, conectar, sessao, papel, auth, rpc,
+    tarja, validade, trilho, trilhar, agora, procedencia,
+    confirmar, toast, vazio, sinalFraco, pintarFicha, rotular,
+    fmt, mascararCPF, esc
+  };
+})();
+
+if (typeof window !== 'undefined') window.SigmaTR = SigmaTR;
