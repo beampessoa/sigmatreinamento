@@ -97,7 +97,7 @@ const SigmaTR = (() => {
 
   // ── CSS — mesmos tokens do E-SIGMA. Injetado uma vez. ─────────────────────
   const CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Exo+2:wght@400;500;600;700;800&display=swap');
 
 /* ── grid: a CASCA é dona. A página NÃO escreve grid-area. (erro 3, morto) ── */
 .st-app{display:grid;min-height:100vh;
@@ -370,11 +370,20 @@ const SigmaTR = (() => {
   /* ══ EXTENSÃO ══ peças da fatia 1 que a casca ainda não tinha.
      Mesmos tokens. Nada aqui redefine classe que já existe acima. ══════════ */
   const CSS_EXTRA = `
-/* PORTÃO (login · ativar) — não é painel: sem header, sem sidebar */
+/* PORTÃO (login · ativar) — não é painel: sem header, sem sidebar.
+   ATENÇÃO: o CSS da casca aplica fonte componente a componente, e todo componente
+   vive dentro de .st-app. O portão NÃO cria .st-app — então ele precisa declarar
+   fonte e box-sizing por conta própria, ou cai na serifa do navegador e o campo
+   com padding estoura os 100% da caixa. */
 .st-portao-tela{min-height:100vh;display:flex;align-items:center;justify-content:center;
-  padding:24px 18px;background:linear-gradient(180deg,#F4F6FA,#E8EDF4)}
+  padding:24px 18px;background:linear-gradient(180deg,#F4F6FA,#E8EDF4);
+  font-family:'Exo 2',-apple-system,'Segoe UI',Roboto,sans-serif;color:#1F2937}
+.st-portao-tela *{box-sizing:border-box}
 .st-portao{width:100%;max-width:400px;background:#fff;border:1px solid #E5E7EB;border-radius:14px;
   box-shadow:0 4px 12px rgba(16,24,40,.10);padding:26px 22px}
+/* No portão o botão é a ação única da tela: ocupa a largura toda.
+   (No painel o .st-btn continua auto — não mexo no que já roda.) */
+.st-portao .st-btn{width:100%;padding:13px 18px;min-height:48px;font-size:15px}
 .st-portao-marca{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding-bottom:16px;
   border-bottom:1px solid #E5E7EB}
 .st-portao-marca img{height:34px;width:auto;object-fit:contain}
