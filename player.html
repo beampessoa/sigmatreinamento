@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Treinamento · Sigma Treinamentos</title>
+</head>
+
+<!--
+  ============================================================================
+  player.html — a página de maior risco do produto.
+
+  REGRA DA CASCA, RESPEITADA AQUI:
+    A página NÃO escreve cor, tamanho, borda nem grid. Só CLASSES.
+    Todo o CSS mora no sigmatr-ui.js (const CSS → injectCSS()).
+    Se a primária mudar, esta página muda junto. Sem tocar nela.
+
+  AS TRAVAS, E POR QUE CADA UMA EXISTE:
+
+  1. SEM BARRA DE BUSCA (controls=0, disablekb=1)
+     A barra do YouTube arrasta pro fim. Ela É o convite pra pular.
+
+  2. HEARTBEAT A CADA 15s, VALIDADO NO SERVIDOR
+     O cliente NUNCA escreve progresso — não existe policy de INSERT em
+     progresso_video. Só o serverless, com service_role.
+
+  3. VELOCIDADE 1× / 1,5× / 2× — VISÍVEL
+     O heartbeat tolera 2,2×. Se o botão não estiver na tela, o benefício fica
+     só pra quem abre o DevTools — premiando exatamente quem tenta burlar.
+     DAR O ATALHO LEGÍTIMO MATA O ATALHO ILEGÍTIMO.
+
+  4. CHECKPOINTS — a única camada honestamente defensável
+     Errar DESCREDITA os 60s anteriores. Reclicar não resolve: tem que
+     REASSISTIR. E não dizemos qual era a certa — ele descobre reassistindo.
+
+  5. FAIXA DE REDE
+     3G da refinaria. Silêncio faz a pessoa reassistir com medo, ou desistir.
+
+  6. PROGRESSO É COBERTURA, NÃO POSIÇÃO
+     A barra mostra os TRECHOS. Pular deixa buraco, e buraco não fecha sozinho.
+  ============================================================================
+-->
+
+<body data-shell="treinando" data-pagina="player">
+
+  <div id="app">
+
+    <!-- Bloco de Controle de Documento — o rigor do CQ, sem propaganda -->
+    <div class="st-doc">
+      <div class="st-doc-eyebrow">Procedimento</div>
+      <div class="st-doc-titulo" id="doc-titulo">—</div>
+      <div class="st-doc-meta"   id="doc-meta">—</div>
+    </div>
+
+    <div class="st-rede" id="rede">
+      Sinal fraco. <b>Seu progresso está guardado</b> — pode continuar assistindo.
+    </div>
+
+    <div class="st-player">
+      <div class="st-video">
+        <div id="yt"></div>
+        <div class="st-capa" id="capa"></div>
+      </div>
+
+      <div class="st-barra" id="barra">
+        <span id="segs"></span>
+        <span id="marcas"></span>
+        <span class="st-agulha" id="agulha"></span>
+      </div>
+
+      <div class="st-controles">
+        <button class="st-btn" id="btn-play">Assistir</button>
+        <span class="st-tempo" id="tempo">0:00 / 0:00</span>
+
+        <div class="st-vel-grupo">
+          <span class="st-vel-label">Velocidade</span>
+          <button class="st-btn st-vel vel" data-v="1"                >1×</button>
+          <button class="st-btn st-vel vel" data-v="1.5" data-tom="quieto">1,5×</button>
+          <button class="st-btn st-vel vel" data-v="2"   data-tom="quieto">2×</button>
+        </div>
+      </div>
+
+      <div class="st-rodape-player">
+        <span id="tarja-prog"></span>
+        <span class="st-pulso" id="pulso">gravando</span>
+        <a class="st-btn st-btn-prova" id="btn-prova" href="#">Fazer a prova</a>
+      </div>
+    </div>
+
+    <p class="st-nota-rodape">
+      Este treinamento é registrado. Assistir por completo é o que libera a prova.
+    </p>
+
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="../sigmatr-ui.js"></script>
+  <script>
+  (async () => {
+    const $ = id => document.getElementById(id);
+    const REVISAO_ID = new URLSearchParams(location.search).get('r');
+
+    await SigmaTR.init({ titulo: 'Treinamento' });
+    const db = SigmaTR.db;
+
+    if (!REVISAO_ID) {
+      $('app').innerHTML = SigmaTR.vazio({
+        titulo: 'Treinamento não informado',
+        texto: 'Volte e escolha um item da sua ficha.',
+        acao: 'Minha ficha', href: 'inicio.html' });
+      return;
+    }
+
+    const { data: { session } } = await db.auth.getSession();
+    const TOKEN = session.access_token;
+
+    // ── a revisão vigente (e o Bloco de Controle) ──
+    const { data: R } = await db
+      .from('vw_revisao_vigente').select('*')
+      .eq('revisao_id', REVISAO_ID).maybeSingle();
+
+    if (!R || !R.youtube_video_id) {
+      $('app').innerHTML = SigmaTR.vazio({
+        titulo: 'Este treinamento ainda não tem conteúdo publicado',
+        texto: 'O Controle da Qualidade ainda não publicou a revisão vigente.',
+        acao: 'Minha ficha', href: 'inicio.html' });
+      return;
+    }
+
+    const DUR = R.duracao_segundos;
+    const mmss = s => `${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`;
+    const pct  = s => (s / DUR * 100).toFixed(2) + '%';
+
+    $('doc-titulo').textContent = R.titulo;
+    $('doc-meta').innerHTML =
+      SigmaTR.esc(R.procedimento_codigo || '') + ' · ' + SigmaTR.esc(R.revisao) +
+      (R.aprovado_por ? ' · aprovado por <b>' + SigmaTR.esc(R.aprovado_por) + '</b>' : '') +
+      (R.aprovado_em  ? ' em ' + SigmaTR.fmt.data(R.aprovado_em) : '');
+
+    // ── checkpoints (sem gabarito — vêm do serverless) ──
+    let CPS = [];
+    try {
+      const res = await fetch('/api/checkpoint?revisao_id=' + REVISAO_ID,
+                              { headers: { Authorization: 'Bearer ' + TOKEN } });
+      CPS = (await res.json()).checkpoints || [];
+    } catch (e) { /* sem checkpoint, o vídeo ainda roda */ }
+
+    const respondidos = new Set();
+    $('marcas').innerHTML = CPS
+      .map(c => `<span class="st-marca" style="left:${pct(c.segundo)}"></span>`)
+      .join('');
+
+    // ── estado ──
+    let P = null, tocando = false, ultimoReportado = 0;
+    let segmentos = [], creditado = 0, concluido = false, pendentes = [];
+
+    // ── player ──
+    window.onYouTubeIframeAPIReady = () => {
+      P = new YT.Player('yt', {
+        videoId: R.youtube_video_id,
+        playerVars: {
+          controls: 0,      // ← sem barra de busca
+          disablekb: 1,     // ← sem setas do teclado
+          modestbranding: 1, rel: 0, fs: 0,
+          playsinline: 1,   // ← sem isso o iPhone sai da página
+          origin: location.origin
+        },
+        events: {
+          onReady: () => { pintar(); tick(); },
+          onStateChange: e => {
+            tocando = (e.data === YT.PlayerState.PLAYING);
+            $('btn-play').textContent = tocando ? 'Pausar' : 'Assistir';
+            $('pulso').dataset.ativo = tocando ? '1' : '0';
+            if (e.data === YT.PlayerState.ENDED) enviar(true);
+          }
+        }
+      });
+    };
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    document.head.appendChild(tag);
+
+    const alternar = () => { if (P) tocando ? P.pauseVideo() : P.playVideo(); };
+    $('capa').onclick = alternar;
+    $('btn-play').onclick = alternar;
+
+    document.querySelectorAll('.vel').forEach(b => b.onclick = () => {
+      P.setPlaybackRate(parseFloat(b.dataset.v));
+      document.querySelectorAll('.vel').forEach(x => {
+        if (x === b) delete x.dataset.tom; else x.dataset.tom = 'quieto';
+      });
+    });
+
+    // ── laço ──
+    setInterval(tick, 500);
+    setInterval(() => { if (tocando) enviar(); }, 15000);
+
+    function tick() {
+      if (!P || !P.getCurrentTime) return;
+      const t = P.getCurrentTime();
+      $('tempo').textContent = mmss(t) + ' / ' + mmss(DUR);
+      $('agulha').style.left = pct(t);
+
+      const cp = CPS.find(c => !respondidos.has(c.id) && t >= c.segundo && t < c.segundo + 3);
+      if (cp && tocando) { P.pauseVideo(); perguntar(cp); }
+    }
+
+    // ── heartbeat ──
+    async function enviar(forcar) {
+      if (!P || !P.getCurrentTime) return;
+      const ate = Math.floor(P.getCurrentTime());
+      const de  = Math.floor(ultimoReportado);
+      if (!forcar && ate <= de) return;
+
+      const fila = [...pendentes, { revisao_id: REVISAO_ID, de, ate }];
+      pendentes = [];
+      ultimoReportado = ate;
+
+      for (const j of fila) {
+        try {
+          const res = await fetch('/api/heartbeat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+            body: JSON.stringify(j)
+          });
+          if (!res.ok) throw new Error('http');
+          const r = await res.json();
+
+          $('rede').dataset.ativa = '0';
+          creditado = r.creditado;
+          concluido = r.concluido;
+          pintar();
+
+          /* r.aceito === false → tempo impossível. NÃO contamos ao usuário:
+             ensinar o fraudador a calibrar é pior do que deixá-lo tentar.
+             Vira a coluna `rejeicoes` no painel do admin. */
+
+        } catch (e) {
+          pendentes.push(j);
+          $('rede').dataset.ativa = '1';
+        }
+      }
+    }
+
+    // ── barra de cobertura ──
+    async function pintar() {
+      const { data: pv } = await db.from('progresso_video')
+        .select('segmentos, segundos_creditados, concluido')
+        .eq('revisao_id', REVISAO_ID).maybeSingle();
+
+      if (pv) {
+        segmentos = pv.segmentos || [];
+        creditado = pv.segundos_creditados || 0;
+        concluido = pv.concluido;
+      }
+
+      $('segs').innerHTML = segmentos.map(([a, b]) =>
+        `<span data-seg style="left:${pct(a)};width:${((b-a)/DUR*100).toFixed(2)}%"></span>`
+      ).join('');
+
+      const cob = Math.min(100, Math.round(creditado / DUR * 100));
+      $('tarja-prog').innerHTML = concluido
+        ? SigmaTR.tarja('apto', 'vídeo assistido')
+        : `<span class="st-tarja" data-s="nunca_fez">${cob}% · faltam ${mmss(Math.max(0, DUR - creditado))}</span>`;
+
+      const b = $('btn-prova');
+      b.dataset.pronto = concluido ? '1' : '0';
+      b.href = 'prova.html?r=' + REVISAO_ID;
+    }
+
+    // ── checkpoint ──
+    function perguntar(cp) {
+      const d = document.createElement('dialog');
+      d.className = 'st-modal';
+      d.innerHTML =
+        '<div class="st-modal-in">' +
+          '<div class="st-cp-eyebrow">Verificação · ' + mmss(cp.segundo) + '</div>' +
+          '<h2>' + SigmaTR.esc(cp.pergunta) + '</h2>' +
+          '<div class="st-cp-alts" id="alts"></div>' +
+          '<p class="st-cp-nota">Errando, o trecho anterior volta a ser exigido — você reassiste.</p>' +
+        '</div>';
+      document.body.appendChild(d);
+
+      cp.alternativas.forEach((txt, i) => {
+        const b = document.createElement('button');
+        b.className = 'st-btn st-cp-alt';
+        b.dataset.tom = 'quieto';
+        b.textContent = txt;
+        b.onclick = async () => {
+          d.querySelectorAll('button').forEach(x => x.disabled = true);
+          try {
+            const res = await fetch('/api/checkpoint', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
+              body: JSON.stringify({ checkpoint_id: cp.id, escolha: i })
+            });
+            const r = await res.json();
+            d.close(); d.remove();
+
+            if (r.acertou) {
+              respondidos.add(cp.id);
+              SigmaTR.toast('Certo. Seguindo.', 'ok');
+            } else {
+              /* Não dizemos qual era a certa. Ele descobre REASSISTINDO —
+                 que é o ponto. O banco já descreditou os 60s anteriores. */
+              SigmaTR.toast('Não é essa. Reveja a partir de ' + mmss(r.voltar_para) + '.', 'erro');
+              ultimoReportado = r.voltar_para;
+              P.seekTo(r.voltar_para, true);
+            }
+            await pintar();
+            P.playVideo();
+
+          } catch (e) {
+            d.querySelectorAll('button').forEach(x => x.disabled = false);
+            SigmaTR.toast('Sem conexão. Responda de novo.', 'erro');
+          }
+        };
+        d.querySelector('#alts').appendChild(b);
+      });
+
+      d.showModal();
+    }
+
+    // não perder o trecho ao sair da página
+    window.addEventListener('pagehide', () => {
+      if (!tocando || !P) return;
+      navigator.sendBeacon?.('/api/heartbeat', new Blob([JSON.stringify({
+        revisao_id: REVISAO_ID,
+        de: Math.floor(ultimoReportado),
+        ate: Math.floor(P.getCurrentTime())
+      })], { type: 'application/json' }));
+    });
+
+  })();
+  </script>
+</body>
+</html>
