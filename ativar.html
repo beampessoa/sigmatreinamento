@@ -78,7 +78,7 @@
         titulo: 'Ativar seu cadastro',
         texto:  'Seu cadastro foi importado pelo RH. Confirme quem é você para vincular um e-mail.',
         miolo: `
-          <div class="st-portao-passo">Passo 1 de 3</div>
+          <div class="st-passo">Passo 1 de 3</div>
           ${msg ? err(msg) : ''}
           <div class="st-campo">
             <label for="cpf">CPF</label>
@@ -87,7 +87,7 @@
             <small>Só é usado para encontrar seu cadastro. Não aparece no endereço da página.</small>
           </div>
           <button class="st-btn" id="ir">Continuar</button>`,
-        pe: 'Já ativou? <a href="/login.html">Entrar</a>'
+        pe: 'Já ativou? <a href="login.html">Entrar</a>'
       });
 
       const campo = document.getElementById('cpf');
@@ -123,7 +123,7 @@
         titulo: 'Confirme e escolha seu e-mail',
         texto:  'Este e-mail será o seu acesso. Pode ser pessoal — é onde o código chega.',
         miolo: `
-          <div class="st-portao-passo">Passo 2 de 3</div>
+          <div class="st-passo">Passo 2 de 3</div>
           ${msg ? err(msg) : ''}
           <div class="st-cartao" style="margin-bottom:14px;padding:12px 14px">
             <div style="font-size:15px;font-weight:700">${SigmaTR.esc(pessoa.nome)}</div>
@@ -170,7 +170,7 @@
         titulo: 'Digite o código',
         texto:  `Enviamos 6 dígitos para ${email}. O código vale por 1 hora.`,
         miolo: `
-          <div class="st-portao-passo">Passo 3 de 3</div>
+          <div class="st-passo">Passo 3 de 3</div>
           ${msg ? err(msg) : ''}
           <div class="st-campo st-codigo">
             <label for="cd">Código</label>

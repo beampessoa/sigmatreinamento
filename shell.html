@@ -91,11 +91,8 @@
       superficie: S,
       titulo:    S === 'painel' ? 'Aderência por função' : 'Sua liberação para a área',
       subtitulo: 'GCB Manutenção Industrial · Contrato SAP 4600686554',
-      usuario:   S === 'painel'
-                   ? { nome:'Ana Ribeiro', papel:'admin', funcao:'Controle da Qualidade' }
-                   : { nome:'José Carlos de Almeida', papel:'treinando', funcao:'Soldador' },
-      trilho:    DEMO_TRILHO,
-      ficha:     DEMO_FICHA
+      nome:      S === 'painel' ? 'Ana Ribeiro' : 'José Carlos de Almeida',
+      perfil:    S === 'painel' ? 'Controle da Qualidade' : 'Soldador'
     });
 
     const app = document.getElementById('app');
@@ -181,12 +178,13 @@
     /* ── FRENTE (treinando, celular) ───────────────────────────────────── */
     if (S === 'frente') {
       app.innerHTML = `
+        ${SigmaTR.trilho(DEMO_TRILHO)}
         ${SigmaTR.agora({
           olho:'Agora',
           titulo:'PR-SOL-004 · Soldagem em tubulação',
           texto:'12 minutos. Você precisa deste procedimento para ser liberado como soldador na parada.',
           acao:'Continuar de onde parou · 04:10',
-          href:'/treinando/player.html?rev=…'
+          href:'player.html?r=demo'
         })}
 
         <div class="st-cartao" style="margin-bottom:14px">
@@ -216,14 +214,12 @@
       setTimeout(() => SigmaTR.sinalFraco(false), 5200);
     }
 
-    /* ── VERIFICACAO (fiscal, QR, sol) ─────────────────────────────────── */
-    // já pintada pelo init() via {ficha}. A página não escreve nada.
 
     /* ─── seletor de superfície: SÓ do banco de provas. Não existe em produção ── */
     const sw = document.createElement('div');
     sw.style.cssText = 'position:fixed;right:12px;bottom:12px;z-index:200;display:flex;gap:6px;'
       + 'background:#111827;padding:6px;border-radius:999px;box-shadow:0 6px 20px rgba(0,0,0,.3)';
-    sw.innerHTML = ['painel','frente','verificacao'].map(x =>
+    sw.innerHTML = ['painel','frente'].map(x =>
       `<a href="?s=${x}" style="padding:7px 13px;border-radius:999px;font:600 12px 'Exo 2',sans-serif;
         text-decoration:none;color:${x===S?'#fff':'#94A3B8'};background:${x===S?'#0F4CBA':'transparent'}">${x}</a>`
     ).join('');

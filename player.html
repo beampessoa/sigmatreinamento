@@ -94,9 +94,40 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="../sigmatr-ui.js"></script>
   <script>
-  (async () => {
+  /* BOOT — se a casca não carregar, a página NÃO fica branca: ela grita.
+     Procura o arquivo em mais de um caminho (raiz ou subpasta). */
+  (function () {
+    function panico(t, d) {
+      document.body.innerHTML =
+        '<div style="position:fixed;inset:0;background:#B91C1C;color:#fff;padding:26px;overflow:auto;'
+        + 'font:15px/1.55 -apple-system,Segoe UI,sans-serif">'
+        + '<h1 style="margin:0 0 10px;font-size:22px">Casca não carregou — ' + t + '</h1>'
+        + '<p>' + d + '</p></div>';
+      throw new Error('[boot] ' + t);
+    }
+    window.STBOOT = function (pagina) {
+      var vias = ['sigmatr-ui.js', '../sigmatr-ui.js', '/sigmatr-ui.js'];
+      (function tenta() {
+        if (!vias.length) return panico('sigmatr-ui.js não foi encontrado',
+          'O arquivo da casca precisa estar ao lado desta página. Sirva por HTTP, não por file://.');
+        var el = document.createElement('script');
+        el.src = vias.shift();
+        el.onerror = tenta;
+        el.onload = function () {
+          if (!window.SigmaTR) return panico('sigmatr-ui.js carregou mas não definiu SigmaTR',
+            'Arquivo truncado? Baixe de novo.');
+          if (!window.supabase) return panico('supabase-js não carregou',
+            'CDN bloqueado ou sem rede. A casca precisa dele antes de montar.');
+          pagina();
+        };
+        document.head.appendChild(el);
+      })();
+    };
+  })();
+  </script>
+  <script>
+  STBOOT(async () => {
     const $ = id => document.getElementById(id);
     const REVISAO_ID = new URLSearchParams(location.search).get('r');
 
@@ -331,7 +362,7 @@
       })], { type: 'application/json' }));
     });
 
-  })();
+  });
   </script>
 </body>
 </html>

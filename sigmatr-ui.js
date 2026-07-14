@@ -32,7 +32,7 @@ const SigmaTR = (() => {
   // ── Supabase ──────────────────────────────────────────────────────────────
   // Schema PRÓPRIO (mt01 v2). Não toca em public — lá mora o E-SIGMA.
   // Settings → API → Exposed schemas: adicionar `sigmatr`.
-  const URL_SB = 'https://SEU-PROJETO.supabase.co';
+  const URL_SB = 'https://kiwiykgzogcxiseynzyy.supabase.co';   // mesmo ref do bucket de marca
   const KEY_SB = 'SUA-ANON-KEY';
   const SCHEMA = 'sigmatr';
   let db = null;
@@ -366,11 +366,74 @@ const SigmaTR = (() => {
     throw new Error('[sigmatr-ui] ' + titulo);
   }
 
+
+  /* ══ EXTENSÃO ══ peças da fatia 1 que a casca ainda não tinha.
+     Mesmos tokens. Nada aqui redefine classe que já existe acima. ══════════ */
+  const CSS_EXTRA = `
+/* PORTÃO (login · ativar) — não é painel: sem header, sem sidebar */
+.st-portao-tela{min-height:100vh;display:flex;align-items:center;justify-content:center;
+  padding:24px 18px;background:linear-gradient(180deg,#F4F6FA,#E8EDF4)}
+.st-portao{width:100%;max-width:400px;background:#fff;border:1px solid #E5E7EB;border-radius:14px;
+  box-shadow:0 4px 12px rgba(16,24,40,.10);padding:26px 22px}
+.st-portao-marca{display:flex;align-items:center;gap:10px;margin-bottom:18px;padding-bottom:16px;
+  border-bottom:1px solid #E5E7EB}
+.st-portao-marca img{height:34px;width:auto;object-fit:contain}
+.st-portao-marca b{display:block;font-size:15px;font-weight:700;color:#1F2937;line-height:1.2}
+.st-portao-marca span{display:block;font-size:12px;color:#6B7280}
+.st-portao h1{margin:0 0 6px;font-size:20px;font-weight:700;line-height:1.25;color:#1F2937}
+.st-portao > p{margin:0 0 18px;font-size:13.5px;color:#6B7280;line-height:1.5}
+.st-passo{font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#9CA3AF;margin-bottom:8px}
+.st-campo{margin-bottom:14px}
+.st-campo label{display:block;font-size:12.5px;font-weight:600;color:#1F2937;margin-bottom:5px}
+.st-campo input{width:100%;padding:12px 13px;min-height:48px;font-size:16px;font-family:inherit;
+  border:1px solid #E5E7EB;border-radius:8px;outline:none;color:#1F2937}
+.st-campo input:focus-visible{border-color:#0F4CBA;box-shadow:0 0 0 3px rgba(15,76,186,.14)}
+.st-campo small{display:block;margin-top:5px;font-size:11.5px;color:#6B7280}
+.st-codigo input{text-align:center;font-size:26px;font-weight:700;letter-spacing:10px;padding-left:10px;
+  font-family:ui-monospace,Menlo,monospace}
+.st-erro-msg{display:flex;gap:7px;background:#FEF3F2;border:1px solid #FECACA;border-radius:8px;
+  padding:10px 12px;margin-bottom:14px;font-size:13px;color:#B91C1C;line-height:1.45}
+.st-pe{margin-top:16px;padding-top:14px;border-top:1px solid #E5E7EB;font-size:12.5px;color:#6B7280;text-align:center}
+.st-pe a,.st-elo{color:#0F4CBA;font-weight:600;text-decoration:none;background:none;border:0;padding:0;
+  font-size:12.5px;font-family:inherit;cursor:pointer}
+.st-carregando{opacity:.6;pointer-events:none}
+
+/* TRILHO DE LIBERAÇÃO — segmentos, nunca porcentagem */
+.st-trilho{background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:14px 16px;margin-bottom:14px}
+.st-trilho-topo{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:9px;gap:10px}
+.st-trilho-cont{font-size:14px;font-weight:700;color:#1F2937}
+.st-trilho-cont b{color:#0F4CBA}
+.st-trilho-meta{font-size:11.5px;color:#6B7280}
+.st-segs{display:flex;gap:4px}
+.st-seg{flex:1;height:6px;border-radius:3px;background:#E5E7EB;position:relative}
+.st-seg--ok{background:#22C55E}
+.st-seg--agora{background:#0F4CBA}
+.st-seg--agora::after{content:'';position:absolute;inset:-3px -2px;border-radius:5px;border:2px solid rgba(15,76,186,.25)}
+
+/* AGORA — a única pergunta da tela do treinando */
+.st-agora{background:#fff;border:1px solid #E5E7EB;border-left:4px solid #0F4CBA;border-radius:12px;
+  box-shadow:0 1px 2px rgba(16,24,40,.06);padding:18px;margin-bottom:14px}
+.st-agora-olho{font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#9CA3AF;margin-bottom:6px}
+.st-agora h2{margin:0 0 4px;font-size:19px;font-weight:700;line-height:1.25;color:#1F2937}
+.st-agora p{margin:0 0 14px;font-size:13.5px;color:#6B7280;line-height:1.45}
+
+/* PROCEDÊNCIA — a cadeia de controle do CQ, sem logotipo */
+.st-proc{margin-top:18px;padding:10px 0 0;border-top:1px solid #E5E7EB;font-size:11px;line-height:1.55;
+  color:#6B7280;display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center}
+.st-proc code{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;background:#F4F6FA;border:1px solid #E5E7EB;
+  border-radius:4px;padding:1px 5px;color:#1F2937}
+.st-proc .pt{color:#9CA3AF}
+
+/* SINAL FRACO (fora do player: o player tem a própria faixa) */
+.st-faixa-rede{position:fixed;left:0;right:0;bottom:0;z-index:80;background:#B45309;color:#fff;
+  text-align:center;padding:9px 14px;font-size:13px;font-weight:600}
+`;
+
   function injectCSS() {
     if (document.getElementById('sigmatr-css')) return;
     const st = document.createElement('style');
     st.id = 'sigmatr-css';
-    st.textContent = CSS;
+    st.textContent = CSS + CSS_EXTRA;
     document.head.appendChild(st);
   }
 
@@ -462,14 +525,22 @@ const SigmaTR = (() => {
       return;
     }
 
-    const papel = document.body.dataset.shell;
-    if (!papel) {
+    /* Dois vocabulários circularam nas páginas. Em vez de quebrar metade delas,
+       a casca aceita os dois. `portao` é superfície NOVA: login e ativação. */
+    const APELIDOS = { admin:'admin', painel:'admin',
+                       treinando:'treinando', frente:'treinando',
+                       publico:'publico', verificacao:'publico',
+                       portao:'portao' };
+
+    const declarado = opts.superficie || document.body.dataset.shell;
+    if (!declarado) {
       panico('O &lt;body&gt; não declara <code>data-shell</code>.',
-             'Valores: <code>admin</code> · <code>treinando</code> · <code>publico</code>.');
+             'Valores: <code>portao</code> · <code>admin</code> · <code>treinando</code> · <code>publico</code>.');
     }
-    if (!['admin','treinando','publico'].includes(papel)) {
-      panico(`data-shell desconhecido: <code>${esc(papel)}</code>.`,
-             'Valores: admin · treinando · publico.');
+    const papel = APELIDOS[declarado];
+    if (!papel) {
+      panico(`data-shell desconhecido: <code>${esc(declarado)}</code>.`,
+             'Valores: portao · admin (painel) · treinando (frente) · publico (verificacao).');
     }
 
     const app = document.getElementById('app');
@@ -480,6 +551,29 @@ const SigmaTR = (() => {
     }
 
     injectCSS();
+
+    /* PORTÃO: monta e sai. NÃO exige sessão — o login não pode redirecionar
+       para si mesmo, em laço. Quem já tem sessão com papel aqui é levado embora. */
+    if (papel === 'portao') {
+      const tela = document.createElement('div');
+      tela.className = 'st-portao-tela';
+      app.parentNode.removeChild(app);
+      tela.appendChild(app);
+      document.body.insertBefore(tela, document.body.firstChild);
+      document.body.appendChild(Object.assign(document.createElement('div'), {
+        className: 'st-toasts', id: 'st-toasts', role: 'status'
+      }));
+      document.documentElement.dataset.stMounted = '1';
+
+      if (!opts.demo && window.supabase) {
+        try {
+          const ss = await sessao();
+          const pp = papelDaSessao(ss);
+          if (ss && pp) { window.location.replace(rotaPorPapel(pp)); return; }
+        } catch (e) { /* sem sessão é exatamente o esperado aqui */ }
+      }
+      return { superficie: 'portao' };
+    }
 
     let nome = opts.nome || '', perfil = opts.perfil || '';
     let empresa = BRAND.contratante.nome, contrato = BRAND.contrato;
@@ -688,9 +782,172 @@ const SigmaTR = (() => {
     });
   }
 
+
+  /* ══ EXTENSÃO ══ banco, sessão e as peças da fatia 1 ═════════════════════ */
+
+  // Acrescenta ao fmt existente — não redeclara. O que já roda continua rodando.
+  fmt.tempo = seg => {
+    const t = Math.max(0, Math.round(seg || 0));
+    return String(Math.floor(t / 60)).padStart(2,'0') + ':' + String(t % 60).padStart(2,'0');
+  };
+  fmt.dataHora = d => d ? new Date(d).toLocaleString('pt-BR', { timeZone:'America/Sao_Paulo',
+    day:'2-digit', month:'2-digit', hour:'2-digit', minute:'2-digit' }) : '—';
+
+  function conectar() {
+    if (db) return db;
+    if (!window.supabase) {
+      panico('supabase-js não carregado.',
+             'Inclua o script do supabase-js ANTES de <code>sigmatr-ui.js</code>.');
+    }
+    db = window.supabase.createClient(URL_SB, KEY_SB, {
+      db: { schema: SCHEMA },
+      auth: { persistSession: true, autoRefreshToken: true }
+    });
+    return db;
+  }
+
+  async function sessao() {
+    const { data } = await conectar().auth.getSession();
+    return data.session;
+  }
+
+  // Papel NAMESPACED: admin do E-SIGMA não é admin aqui.
+  const papelDaSessao = ss => (ss && ss.user && ss.user.app_metadata
+                               && ss.user.app_metadata.roles
+                               && ss.user.app_metadata.roles.sigmatr) || null;
+
+  const rotaPorPapel = pp => (pp === 'admin' ? 'admin.html' : 'inicio.html');
+
+  const auth = {
+    enviarCodigo:    email        => conectar().auth.signInWithOtp({ email, options:{ shouldCreateUser:false } }),
+    confirmarCodigo: (email, token) => conectar().auth.verifyOtp({ email, token, type:'email' }),
+    sair: async () => { await conectar().auth.signOut(); sessionStorage.clear();
+                        window.location.href = 'login.html'; }
+  };
+
+  /* Acesso ao banco SEMPRE por função. A view roda com privilégio do DONO:
+     dar SELECT em vw_aptidao_pessoa para `authenticated` vaza a aptidão de todo mundo. */
+  const rpc = {
+    minhaFicha:    ()    => conectar().rpc('minha_ficha'),
+    painelAptidao: (a)   => conectar().rpc('painel_aptidao', a || {}),
+    impacto:       (rev) => conectar().rpc('impacto_revisao', { p_revisao_id: rev })
+  };
+
+  /* Serverless. O token vai no cabeçalho; o servidor resolve pessoa_id pela SESSÃO.
+     Se pessoa_id viesse no corpo, o cliente creditaria progresso pro colega. */
+  const FN_BASE = (location.hostname.endsWith('netlify.app') || location.hostname.endsWith('netlify.com'))
+    ? '/.netlify/functions' : '/api';
+
+  async function fn(nome, corpo = {}, opcoes) {
+    const publico = !!(opcoes && opcoes.publico);
+    const cab = { 'Content-Type': 'application/json' };
+    if (!publico) {
+      const ss = await sessao();
+      if (!ss) { window.location.href = 'login.html'; throw new Error('sem sessão'); }
+      cab.Authorization = 'Bearer ' + ss.access_token;
+    }
+    const r = await fetch(FN_BASE + '/' + nome, {
+      method:'POST', headers:cab, body:JSON.stringify(corpo), cache:'no-store' });
+    const t = await r.text();
+    let j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {}
+    if (!r.ok) throw Object.assign(new Error((j && j.erro) || ('Falha em ' + nome)),
+                                   { status: r.status, corpo: j });
+    return j;
+  }
+
+  /* LINGUAGEM (Onda 1). A casca já tem um ROTULO (a tarja usa). Este é mais rico:
+     palavra + glifo + tom — porque cor sozinha não comunica (daltonismo em obra é
+     comum, e no sol a cor lava). Convivem. Os valores do BANCO não mudam: são
+     contrato de integração com o E-SIGMA. */
+  const ROTULO_ONDA1 = {
+    apto:               { palavra:'Liberado',                  glifo:'✓', tom:'ok'     },
+    apto_com_pendencia: { palavra:'Liberado · em carência',    glifo:'!', tom:'aviso'  },
+    vence_em_breve:     { palavra:'Vence em breve',            glifo:'!', tom:'aviso'  },
+    inapto_revisao:     { palavra:'Revisão nova',              glifo:'↻', tom:'erro'   },
+    inapto_vencido:     { palavra:'Vencido',                   glifo:'✕', tom:'erro'   },
+    nunca_fez:          { palavra:'Não iniciado',              glifo:'–', tom:'neutro' },
+    reprovado:          { palavra:'Não atingiu a nota mínima', glifo:'–', tom:'neutro' }
+  };
+  const rotular = st => ROTULO_ONDA1[st] || ROTULO_ONDA1.nunca_fez;
+
+  /* PORTÃO — a moldura do login e da ativação */
+  function portao({ titulo, texto, miolo, pe = '' }) {
+    return `<div class="st-portao">
+      <div class="st-portao-marca">
+        <img src="${esc(logoURL(BRAND.sistema))}" alt="${esc(BRAND.sistema.alt)}"
+             onerror="this.style.display='none'">
+        <div><b>${esc(BRAND.produto)}</b><span>${esc(BRAND.subtitulo)}</span></div>
+      </div>
+      <h1>${esc(titulo)}</h1>
+      <p>${esc(texto)}</p>
+      ${miolo}
+      ${pe ? `<div class="st-pe">${pe}</div>` : ''}
+    </div>`;
+  }
+
+  /* TRILHO — "4 de 6 liberados". Segmento é procedimento, e procedimento não se
+     faz pela metade: por isso não existe porcentagem aqui. */
+  function trilho({ itens = [], funcao = '' } = {}) {
+    const ok = itens.filter(i => i.status === 'apto' || i.status === 'apto_com_pendencia').length;
+    const segs = itens.map(i => {
+      const cls = (i.status === 'apto' || i.status === 'apto_com_pendencia') ? 'st-seg--ok'
+                : i.agora ? 'st-seg--agora' : '';
+      return `<div class="st-seg ${cls}" title="${esc(i.titulo || '')}"></div>`;
+    }).join('');
+    return `<div class="st-trilho">
+      <div class="st-trilho-topo">
+        <div class="st-trilho-cont"><b>${ok}</b> de ${itens.length} liberados</div>
+        <div class="st-trilho-meta">${esc(funcao || 'Trilho de liberação')}</div>
+      </div>
+      <div class="st-segs">${segs || '<div class="st-seg"></div>'}</div>
+    </div>`;
+  }
+
+  /* AGORA — a resposta para "o que preciso fazer agora?". Nada compete com ele. */
+  function agora({ olho = 'Agora', titulo, texto, acao, href, bloqueado = false }) {
+    return `<div class="st-agora">
+      <div class="st-agora-olho">${esc(olho)}</div>
+      <h2>${esc(titulo)}</h2>
+      <p>${esc(texto)}</p>
+      <button class="st-btn" ${bloqueado ? 'disabled' : ''} data-ir="${esc(href || '')}">${esc(acao)}</button>
+    </div>`;
+  }
+
+  /* PROCEDÊNCIA — a cadeia de controle do CQ dita pela interface, sem propaganda */
+  function procedencia({ codigo, revisao, publicado_em, emitido_por = 'Controle da Qualidade · GCB' }) {
+    return `<div class="st-proc">
+      <span>Procedimento <code>${esc(codigo || '—')}</code></span><span class="pt">·</span>
+      <span>Revisão <code>${esc(revisao || '—')}</code></span><span class="pt">·</span>
+      <span>Publicada em ${esc(fmt.data(publicado_em))}</span><span class="pt">·</span>
+      <span>Revisada e liberada por ${esc(emitido_por)}</span>
+    </div>`;
+  }
+
+  /* SINAL FRACO — a rede caiu. O progresso está guardado. Dizer isso. */
+  let faixaRede = null;
+  function sinalFraco(ligado) {
+    if (ligado && !faixaRede) {
+      faixaRede = document.createElement('div');
+      faixaRede.className = 'st-faixa-rede';
+      faixaRede.setAttribute('role', 'status');
+      faixaRede.textContent = 'Sinal fraco. Seu progresso está guardado.';
+      document.body.appendChild(faixaRede);
+    } else if (!ligado && faixaRede) { faixaRede.remove(); faixaRede = null; }
+  }
+
+  // [data-ir] navega. Uma vez só — cada página não reinventa o clique.
+  document.addEventListener('click', e => {
+    const ir = e.target.closest && e.target.closest('[data-ir]');
+    if (ir && ir.dataset.ir) window.location.href = ir.dataset.ir;
+  });
+
   return {
     VERSAO, BRAND, init, auditar,
     tarja, validade, toast, confirmar, vazio, fmt, mascararCPF, esc,
+    // extensão fatia 1
+    conectar, sessao, auth, rpc, fn, rotaPorPapel,
+    papel: papelDaSessao, ROTULO_ONDA1, rotular,
+    portao, trilho, agora, procedencia, sinalFraco,
     get db() { return db; }
   };
 })();
