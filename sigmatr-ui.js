@@ -694,3 +694,15 @@ const SigmaTR = (() => {
     get db() { return db; }
   };
 })();
+
+/* ============================================================================
+ * REGISTRO GLOBAL — não remover.
+ *
+ * `const SigmaTR = ...` no topo de um <script src> cria a variável no ESCOPO DO
+ * SCRIPT, não em `window`. O arquivo carrega inteiro, o objeto existe, e mesmo
+ * assim `window.SigmaTR` é undefined — e o boot loader acusa "carregou mas não
+ * definiu SigmaTR".
+ *
+ * Diagnóstico enganoso: parece download truncado. Não é. É escopo.
+ * ========================================================================== */
+window.SigmaTR = SigmaTR;
