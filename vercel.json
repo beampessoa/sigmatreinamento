@@ -18,13 +18,6 @@
       ]
     },
     {
-      "source": "/t/(.*)",
-      "headers": [
-        { "key": "Cache-Control", "value": "no-store" },
-        { "key": "X-Robots-Tag", "value": "noindex, nofollow" }
-      ]
-    },
-    {
       "source": "/(p|v)/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "no-store" },

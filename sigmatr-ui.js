@@ -597,7 +597,7 @@ const SigmaTR = (() => {
       db = window.supabase.createClient(URL_SB, KEY_SB, { db: { schema: SCHEMA } });
 
       const { data: { session } } = await db.auth.getSession();
-      if (!session) { window.location.href = 'login.html'; return; }
+      if (!session) { window.location.href = 't.html'; return; }
 
       nome   = nome   || session.user.email.split('@')[0];
       perfil = perfil || (papel === 'admin' ? 'Administrador' : 'Treinando');
@@ -679,7 +679,7 @@ const SigmaTR = (() => {
     if (out) out.addEventListener('click', async () => {
       if (db) await db.auth.signOut();
       sessionStorage.clear();
-      window.location.href = 'login.html';
+      window.location.href = 't.html';
     });
   }
 
@@ -831,7 +831,7 @@ const SigmaTR = (() => {
     enviarCodigo:    email        => conectar().auth.signInWithOtp({ email, options:{ shouldCreateUser:false } }),
     confirmarCodigo: (email, token) => conectar().auth.verifyOtp({ email, token, type:'email' }),
     sair: async () => { await conectar().auth.signOut(); sessionStorage.clear();
-                        window.location.href = 'login.html'; }
+                        window.location.href = 't.html'; }
   };
 
   /* Acesso ao banco SEMPRE por função. A view roda com privilégio do DONO:
