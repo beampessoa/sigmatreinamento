@@ -969,6 +969,7 @@ const SigmaTR = (() => {
     // extensão fatia 1
     conectar, sessao, auth, rpc, fn, rotaPorPapel,
     guardarToken, temToken: () => !!tokenTreinando(),
+    tokenCru: () => tokenTreinando(),
     entrarPorToken: (t) => { guardarToken(t); return fn('sessao-token', { token: t }, { publico:true }); },
     papel: papelDaSessao, ROTULO_ONDA1, rotular,
     portao, trilho, agora, procedencia, sinalFraco,

@@ -64,7 +64,6 @@
 
       <div class="st-barra" id="barra">
         <span id="segs"></span>
-        <span id="marcas"></span>
         <span class="st-agulha" id="agulha"></span>
       </div>
 
@@ -132,7 +131,6 @@
     const REVISAO_ID = new URLSearchParams(location.search).get('r');
 
     await SigmaTR.init({ titulo: 'Treinamento' });
-    const db = SigmaTR.db;
 
     if (!REVISAO_ID) {
       $('app').innerHTML = SigmaTR.vazio({
@@ -142,18 +140,24 @@
       return;
     }
 
-    const { data: { session } } = await db.auth.getSession();
-    const TOKEN = session.access_token;
-
-    // ── a revisão vigente (e o Bloco de Controle) ──
-    const { data: R } = await db
-      .from('vw_revisao_vigente').select('*')
-      .eq('revisao_id', REVISAO_ID).maybeSingle();
-
-    if (!R || !R.youtube_video_id) {
+    // ── a revisão vigente + progresso, tudo pela /api/ (token no corpo) ──
+    let R, prog;
+    try {
+      const resp = await SigmaTR.fn('revisao', { revisao_id: REVISAO_ID });
+      R = resp.revisao;
+      prog = resp.progresso;
+    } catch (e) {
+      if (e && e.status === 401) { location.replace('t.html'); return; }
+      if (e && e.status === 404) {
+        $('app').innerHTML = SigmaTR.vazio({
+          titulo: 'Este treinamento ainda não tem conteúdo publicado',
+          texto: 'O Controle da Qualidade ainda não publicou a revisão vigente.',
+          acao: 'Minha ficha', href: 'inicio.html' });
+        return;
+      }
       $('app').innerHTML = SigmaTR.vazio({
-        titulo: 'Este treinamento ainda não tem conteúdo publicado',
-        texto: 'O Controle da Qualidade ainda não publicou a revisão vigente.',
+        titulo: 'Não deu para carregar agora',
+        texto: 'Falha de conexão. Tente abrir de novo em instantes.',
         acao: 'Minha ficha', href: 'inicio.html' });
       return;
     }
@@ -168,22 +172,10 @@
       (R.aprovado_por ? ' · aprovado por <b>' + SigmaTR.esc(R.aprovado_por) + '</b>' : '') +
       (R.aprovado_em  ? ' em ' + SigmaTR.fmt.data(R.aprovado_em) : '');
 
-    // ── checkpoints (sem gabarito — vêm do serverless) ──
-    let CPS = [];
-    try {
-      const res = await fetch('/api/checkpoint?revisao_id=' + REVISAO_ID,
-                              { headers: { Authorization: 'Bearer ' + TOKEN } });
-      CPS = (await res.json()).checkpoints || [];
-    } catch (e) { /* sem checkpoint, o vídeo ainda roda */ }
-
-    const respondidos = new Set();
-    $('marcas').innerHTML = CPS
-      .map(c => `<span class="st-marca" style="left:${pct(c.segundo)}"></span>`)
-      .join('');
-
-    // ── estado ──
+    // ── estado (semeado com o progresso já vindo da /api/) ──
     let P = null, tocando = false, ultimoReportado = 0;
-    let segmentos = [], creditado = 0, concluido = false, pendentes = [];
+    let segmentos = prog.segmentos || [], creditado = prog.creditado || 0, concluido = prog.concluido || false;
+    let pendentes = [];
 
     // ── player ──
     window.onYouTubeIframeAPIReady = () => {
@@ -231,9 +223,6 @@
       const t = P.getCurrentTime();
       $('tempo').textContent = mmss(t) + ' / ' + mmss(DUR);
       $('agulha').style.left = pct(t);
-
-      const cp = CPS.find(c => !respondidos.has(c.id) && t >= c.segundo && t < c.segundo + 3);
-      if (cp && tocando) { P.pauseVideo(); perguntar(cp); }
     }
 
     // ── heartbeat ──
@@ -249,17 +238,12 @@
 
       for (const j of fila) {
         try {
-          const res = await fetch('/api/heartbeat', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
-            body: JSON.stringify(j)
-          });
-          if (!res.ok) throw new Error('http');
-          const r = await res.json();
+          const r = await SigmaTR.fn('heartbeat', j);
 
           $('rede').dataset.ativa = '0';
           creditado = r.creditado;
           concluido = r.concluido;
+          if (r.segmentos) segmentos = r.segmentos;
           pintar();
 
           /* r.aceito === false → tempo impossível. NÃO contamos ao usuário:
@@ -273,18 +257,10 @@
       }
     }
 
-    // ── barra de cobertura ──
-    async function pintar() {
-      const { data: pv } = await db.from('progresso_video')
-        .select('segmentos, segundos_creditados, concluido')
-        .eq('revisao_id', REVISAO_ID).maybeSingle();
-
-      if (pv) {
-        segmentos = pv.segmentos || [];
-        creditado = pv.segundos_creditados || 0;
-        concluido = pv.concluido;
-      }
-
+    // ── barra de cobertura (quanto assistiu) ──
+    // Sem db.from direto: o estado vem da /api/ (revisao) e é atualizado
+    // a cada heartbeat. É a resposta honesta para "quanto a pessoa viu".
+    function pintar() {
       $('segs').innerHTML = segmentos.map(([a, b]) =>
         `<span data-seg style="left:${pct(a)};width:${((b-a)/DUR*100).toFixed(2)}%"></span>`
       ).join('');
@@ -299,63 +275,12 @@
       b.href = 'prova.html?r=' + REVISAO_ID;
     }
 
-    // ── checkpoint ──
-    function perguntar(cp) {
-      const d = document.createElement('dialog');
-      d.className = 'st-modal';
-      d.innerHTML =
-        '<div class="st-modal-in">' +
-          '<div class="st-cp-eyebrow">Verificação · ' + mmss(cp.segundo) + '</div>' +
-          '<h2>' + SigmaTR.esc(cp.pergunta) + '</h2>' +
-          '<div class="st-cp-alts" id="alts"></div>' +
-          '<p class="st-cp-nota">Errando, o trecho anterior volta a ser exigido — você reassiste.</p>' +
-        '</div>';
-      document.body.appendChild(d);
-
-      cp.alternativas.forEach((txt, i) => {
-        const b = document.createElement('button');
-        b.className = 'st-btn st-cp-alt';
-        b.dataset.tom = 'quieto';
-        b.textContent = txt;
-        b.onclick = async () => {
-          d.querySelectorAll('button').forEach(x => x.disabled = true);
-          try {
-            const res = await fetch('/api/checkpoint', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + TOKEN },
-              body: JSON.stringify({ checkpoint_id: cp.id, escolha: i })
-            });
-            const r = await res.json();
-            d.close(); d.remove();
-
-            if (r.acertou) {
-              respondidos.add(cp.id);
-              SigmaTR.toast('Certo. Seguindo.', 'ok');
-            } else {
-              /* Não dizemos qual era a certa. Ele descobre REASSISTINDO —
-                 que é o ponto. O banco já descreditou os 60s anteriores. */
-              SigmaTR.toast('Não é essa. Reveja a partir de ' + mmss(r.voltar_para) + '.', 'erro');
-              ultimoReportado = r.voltar_para;
-              P.seekTo(r.voltar_para, true);
-            }
-            await pintar();
-            P.playVideo();
-
-          } catch (e) {
-            d.querySelectorAll('button').forEach(x => x.disabled = false);
-            SigmaTR.toast('Sem conexão. Responda de novo.', 'erro');
-          }
-        };
-        d.querySelector('#alts').appendChild(b);
-      });
-
-      d.showModal();
-    }
-
     // não perder o trecho ao sair da página
     window.addEventListener('pagehide', () => {
       if (!tocando || !P) return;
+      // sendBeacon leva o token no corpo (não há sessão; o servidor resolve pelo token)
       navigator.sendBeacon?.('/api/heartbeat', new Blob([JSON.stringify({
+        token: SigmaTR.tokenCru ? SigmaTR.tokenCru() : '',
         revisao_id: REVISAO_ID,
         de: Math.floor(ultimoReportado),
         ate: Math.floor(P.getCurrentTime())
