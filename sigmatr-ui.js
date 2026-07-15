@@ -587,9 +587,16 @@ const SigmaTR = (() => {
     let nome = opts.nome || '', perfil = opts.perfil || '';
     let empresa = BRAND.contratante.nome, contrato = BRAND.contrato;
 
-    // Sessão — só nas superfícies autenticadas.
-    // opts.demo = true: monta a casca sem Supabase (shell.html de referência).
-    if (papel !== 'publico' && !opts.demo) {
+    // TREINANDO: identidade por TOKEN do RH, não por sessão do Supabase.
+    // Sem token = não entrou pelo link; manda para a porta (t.html).
+    if (papel === 'treinando' && !opts.demo) {
+      if (!tokenTreinando()) { window.location.href = 't.html'; return; }
+      perfil = perfil || 'Treinando';
+      // nome/empresa reais vêm da /api/ na própria página (inicio.html).
+    }
+
+    // ADMIN: continua por sessão do Supabase (login de admin).
+    if (papel === 'admin' && !opts.demo) {
       if (!window.supabase) {
         panico('supabase-js não carregado.',
                'Inclua o script do supabase-js ANTES de <code>sigmatr-ui.js</code>.');
@@ -600,7 +607,7 @@ const SigmaTR = (() => {
       if (!session) { window.location.href = 't.html'; return; }
 
       nome   = nome   || session.user.email.split('@')[0];
-      perfil = perfil || (papel === 'admin' ? 'Administrador' : 'Treinando');
+      perfil = perfil || 'Administrador';
 
       try {
         const { data: p } = await db.from('pessoas')
@@ -847,10 +854,7 @@ const SigmaTR = (() => {
   const FN_BASE = (location.hostname.endsWith('netlify.app') || location.hostname.endsWith('netlify.com'))
     ? '/.netlify/functions' : '/api';
 
-  // Identidade do treinando = TOKEN do RH, guardado em sessionStorage.
-  // Vai no CORPO de cada /api/ (nunca em Authorization, nunca na URL).
-  // O servidor resolve pessoa_id pelo hash do token — o cliente não
-  // escolhe de quem é o progresso.
+  // Identidade do treinando = TOKEN do RH, em sessionStorage. Vai no CORPO.
   const TOKEN_KEY = 'sigmatr_token';
   function tokenTreinando() { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } }
   function guardarToken(t) { try { sessionStorage.setItem(TOKEN_KEY, t); } catch (e) {} }
@@ -861,8 +865,8 @@ const SigmaTR = (() => {
     const carga = { ...corpo };
     if (!publico) {
       const tk = tokenTreinando();
-      if (!tk) { window.location.href = 'inicio.html'; throw new Error('sem token'); }
-      carga.token = tk;   // no corpo, sempre
+      if (!tk) { window.location.href = 't.html'; throw new Error('sem token'); }
+      carga.token = tk;
     }
     const r = await fetch(FN_BASE + '/' + nome, {
       method:'POST', headers:cab, body:JSON.stringify(carga), cache:'no-store' });
@@ -964,8 +968,7 @@ const SigmaTR = (() => {
     tarja, validade, toast, confirmar, vazio, fmt, mascararCPF, esc,
     // extensão fatia 1
     conectar, sessao, auth, rpc, fn, rotaPorPapel,
-    // acesso por token do RH:
-    guardarToken,
+    guardarToken, temToken: () => !!tokenTreinando(),
     entrarPorToken: (t) => { guardarToken(t); return fn('sessao-token', { token: t }, { publico:true }); },
     papel: papelDaSessao, ROTULO_ONDA1, rotular,
     portao, trilho, agora, procedencia, sinalFraco,
