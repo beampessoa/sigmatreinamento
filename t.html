@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Entrando · SIGMA TREINAMENTOS</title>
+</head>
+
+<!-- t.html — a porta de entrada do treinando.
+     O RH manda o link /t.html?k=TOKEN (ou /t/TOKEN, reescrito para cá).
+     Aqui o token é validado no servidor, guardado em sessionStorage e
+     TIRADO da URL. A partir daí ele só trafega no corpo das /api/. -->
+<body data-shell="portao" data-pagina="entrada">
+  <div id="app"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+  /* BOOT — se a casca não carrega, a página grita em vez de ficar branca. */
+  (function () {
+    function panico(t, d) {
+      document.body.innerHTML =
+        '<div style="position:fixed;inset:0;background:#B91C1C;color:#fff;padding:26px;'
+        + 'font:15px/1.55 -apple-system,Segoe UI,sans-serif">'
+        + '<h1 style="margin:0 0 10px;font-size:22px">Não carregou — ' + t + '</h1>'
+        + '<p>' + d + '</p></div>';
+      throw new Error('[boot] ' + t);
+    }
+    window.STBOOT = function (pagina) {
+      var vias = ['sigmatr-ui.js', '../sigmatr-ui.js', '/sigmatr-ui.js'];
+      (function tenta() {
+        if (!vias.length) return panico('sigmatr-ui.js não encontrado',
+          'O arquivo da casca não está em nenhum caminho esperado.');
+        var s = document.createElement('script');
+        s.src = vias.shift();
+        s.onerror = tenta;
+        s.onload = function () {
+          if (!window.SigmaTR) return panico('sigmatr-ui.js não definiu SigmaTR', 'Baixe o arquivo de novo.');
+          if (!window.supabase) return panico('supabase-js não carregou', 'O CDN foi bloqueado (rede fechada).');
+          pagina();
+        };
+        document.head.appendChild(s);
+      })();
+    };
+  })();
+  </script>
+
+  <script>
+  STBOOT(async () => {
+    await SigmaTR.init();   // superfície 'portao': não exige sessão
+    const app = document.getElementById('app');
+
+    // Token da URL: aceita ?k=... , ?token=... ou /t/TOKEN (via rewrite)
+    const q = new URLSearchParams(location.search);
+    let token = (q.get('k') || q.get('token') || '').trim();
+    if (!token) {
+      const m = location.pathname.match(/\/t\/([^/?#]+)/);
+      if (m) token = decodeURIComponent(m[1]).trim();
+    }
+
+    const moldura = (titulo, texto, pe = '') => SigmaTR.portao({
+      titulo, texto,
+      miolo: '<div class="st-portao-passo">Acesso do treinamento</div>',
+      pe
+    });
+
+    if (!token) {
+      app.innerHTML = moldura(
+        'Abra pelo seu link',
+        'Este acesso é individual. Use o link que o RH enviou para você — ele já identifica quem é você.'
+      );
+      return;
+    }
+
+    app.innerHTML = moldura('Entrando…', 'Validando seu acesso.');
+
+    try {
+      const p = await SigmaTR.entrarPorToken(token);   // guarda o token + resolve a pessoa
+
+      // Tira o token da URL antes de seguir (não fica no histórico nem em print)
+      history.replaceState(null, '', 'inicio.html');
+
+      app.innerHTML = moldura(
+        'Olá, ' + SigmaTR.esc((p.nome || '').split(' ')[0] || 'treinando'),
+        (p.funcao ? p.funcao + ' · ' : '') + 'levando você para os seus treinamentos…'
+      );
+
+      setTimeout(() => location.replace('inicio.html'), 700);
+
+    } catch (e) {
+      const naoReconhecido = e && e.status === 401;
+      app.innerHTML = moldura(
+        naoReconhecido ? 'Acesso não reconhecido' : 'Não deu para entrar agora',
+        naoReconhecido
+          ? 'Seu link não foi reconhecido. Ele pode ter expirado ou sido substituído — procure o RH ou o Controle da Qualidade para receber um novo.'
+          : 'Falha de conexão ao validar seu acesso. Tente abrir o link de novo em instantes.'
+      );
+    }
+  });
+  </script>
+</body>
+</html>
