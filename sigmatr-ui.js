@@ -847,16 +847,25 @@ const SigmaTR = (() => {
   const FN_BASE = (location.hostname.endsWith('netlify.app') || location.hostname.endsWith('netlify.com'))
     ? '/.netlify/functions' : '/api';
 
+  // Identidade do treinando = TOKEN do RH, guardado em sessionStorage.
+  // Vai no CORPO de cada /api/ (nunca em Authorization, nunca na URL).
+  // O servidor resolve pessoa_id pelo hash do token — o cliente não
+  // escolhe de quem é o progresso.
+  const TOKEN_KEY = 'sigmatr_token';
+  function tokenTreinando() { try { return sessionStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; } }
+  function guardarToken(t) { try { sessionStorage.setItem(TOKEN_KEY, t); } catch (e) {} }
+
   async function fn(nome, corpo = {}, opcoes) {
     const publico = !!(opcoes && opcoes.publico);
     const cab = { 'Content-Type': 'application/json' };
+    const carga = { ...corpo };
     if (!publico) {
-      const ss = await sessao();
-      if (!ss) { window.location.href = 'login.html'; throw new Error('sem sessão'); }
-      cab.Authorization = 'Bearer ' + ss.access_token;
+      const tk = tokenTreinando();
+      if (!tk) { window.location.href = 'inicio.html'; throw new Error('sem token'); }
+      carga.token = tk;   // no corpo, sempre
     }
     const r = await fetch(FN_BASE + '/' + nome, {
-      method:'POST', headers:cab, body:JSON.stringify(corpo), cache:'no-store' });
+      method:'POST', headers:cab, body:JSON.stringify(carga), cache:'no-store' });
     const t = await r.text();
     let j = null; try { j = t ? JSON.parse(t) : null; } catch (e) {}
     if (!r.ok) throw Object.assign(new Error((j && j.erro) || ('Falha em ' + nome)),
@@ -955,6 +964,9 @@ const SigmaTR = (() => {
     tarja, validade, toast, confirmar, vazio, fmt, mascararCPF, esc,
     // extensão fatia 1
     conectar, sessao, auth, rpc, fn, rotaPorPapel,
+    // acesso por token do RH:
+    guardarToken,
+    entrarPorToken: (t) => { guardarToken(t); return fn('sessao-token', { token: t }, { publico:true }); },
     papel: papelDaSessao, ROTULO_ONDA1, rotular,
     portao, trilho, agora, procedencia, sinalFraco,
     get db() { return db; }
