@@ -118,7 +118,7 @@
     const alvo = urgentes[0] || pendentes[0] || null;
 
     /* Trilho no topo: segmentos, nunca porcentagem. Cada segmento é um procedimento. */
-    SigmaTR.trilhar({
+    SigmaTR.trilho({
       funcao: f.funcao,
       itens: f.itens.map(i => ({ titulo:i.titulo, status:i.status, agora: alvo && i.revisao_id === alvo.revisao_id }))
     });
