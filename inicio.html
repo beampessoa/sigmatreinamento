@@ -26,7 +26,7 @@
       throw new Error('[boot] ' + t);
     }
     window.STBOOT = function (pagina) {
-      var vias = ['sigmatr-ui.js', '../sigmatr-ui.js', '/sigmatr-ui.js'];
+      var vias = ['/sigmatr-ui.js', 'sigmatr-ui.js', '../sigmatr-ui.js'];
       (function tenta() {
         if (!vias.length) return panico(
           'sigmatr-ui.js não foi encontrado',
@@ -131,7 +131,7 @@
         titulo:'Todos os procedimentos da sua função estão liberados',
         texto: 'Seu selo está emitido e vale por 24 meses. O QR do seu crachá aponta para a sua ficha, que é atualizada sozinha.',
         acao:  'Ver meu selo',
-        href:  '/treinando/selo.html'
+        href:  'selo.html'
       });
     } else if (alvo.status === 'inapto_revisao') {
       cartaoAgora = SigmaTR.agora({
@@ -139,7 +139,7 @@
         titulo: `${alvo.codigo ? alvo.codigo + ' · ' : ''}${alvo.titulo}`,
         texto: 'O procedimento foi revisado. Refaça para continuar liberado — você está em carência até a data do aviso.',
         acao:  'Ver o que mudou',
-        href:  `/treinando/player.html?rev=${encodeURIComponent(alvo.revisao_id)}`
+        href:  `player.html?r=${encodeURIComponent(alvo.revisao_id)}`
       });
     } else if (alvo.status === 'inapto_vencido') {
       cartaoAgora = SigmaTR.agora({
@@ -147,7 +147,7 @@
         titulo: `${alvo.codigo ? alvo.codigo + ' · ' : ''}${alvo.titulo}`,
         texto: 'A validade de 24 meses acabou. Refaça para voltar a ser liberado para a área.',
         acao:  'Refazer procedimento',
-        href:  `/treinando/player.html?rev=${encodeURIComponent(alvo.revisao_id)}`
+        href:  `player.html?r=${encodeURIComponent(alvo.revisao_id)}`
       });
     } else if (alvo.pode_prova) {
       cartaoAgora = SigmaTR.agora({
@@ -156,7 +156,7 @@
         texto:  `Você já viu o procedimento inteiro. A prova tem nota mínima 70${
                   alvo.tentativas != null ? ` e você tem ${alvo.tentativas} tentativa${alvo.tentativas===1?'':'s'}` : ''}.`,
         acao:  'Fazer a prova',
-        href:  `/treinando/prova.html?rev=${encodeURIComponent(alvo.revisao_id)}`
+        href:  `prova.html?r=${encodeURIComponent(alvo.revisao_id)}`
       });
     } else {
       const retoma = alvo.segundo > 30;
@@ -167,7 +167,7 @@
           ? 'Você parou no meio. Continue de onde parou — seu progresso está guardado.'
           : 'Assista ao procedimento e responda os pontos de checagem. Depois vem a prova.',
         acao:  retoma ? `Continuar de onde parou · ${SigmaTR.fmt.tempo(alvo.segundo)}` : 'Iniciar liberação',
-        href:  `/treinando/player.html?rev=${encodeURIComponent(alvo.revisao_id)}`
+        href:  `player.html?r=${encodeURIComponent(alvo.revisao_id)}`
       });
     }
 
