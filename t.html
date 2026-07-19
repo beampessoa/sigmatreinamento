@@ -77,14 +77,14 @@
       const p = await SigmaTR.entrarPorToken(token);   // guarda o token + resolve a pessoa
 
       // Tira o token da URL antes de seguir (não fica no histórico nem em print)
-      history.replaceState(null, '', 'inicio.html');
+      history.replaceState(null, '', '/inicio.html');
 
       app.innerHTML = moldura(
         'Olá, ' + SigmaTR.esc((p.nome || '').split(' ')[0] || 'treinando'),
         (p.funcao ? p.funcao + ' · ' : '') + 'levando você para os seus treinamentos…'
       );
 
-      setTimeout(() => location.replace('inicio.html'), 700);
+      setTimeout(() => location.replace('/inicio.html'), 700);
 
     } catch (e) {
       const naoReconhecido = e && e.status === 401;
