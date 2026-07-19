@@ -26,7 +26,7 @@
       throw new Error('[boot] ' + t);
     }
     window.STBOOT = function (pagina) {
-      var vias = ['sigmatr-ui.js', '../sigmatr-ui.js', '/sigmatr-ui.js'];
+      var vias = ['/sigmatr-ui.js', 'sigmatr-ui.js', '../sigmatr-ui.js'];
       (function tenta() {
         if (!vias.length) return panico('sigmatr-ui.js não encontrado',
           'O arquivo da casca não está em nenhum caminho esperado.');

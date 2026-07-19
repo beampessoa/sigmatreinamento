@@ -106,7 +106,7 @@
       throw new Error('[boot] ' + t);
     }
     window.STBOOT = function (pagina) {
-      var vias = ['sigmatr-ui.js', '../sigmatr-ui.js', '/sigmatr-ui.js'];
+      var vias = ['/sigmatr-ui.js', 'sigmatr-ui.js', '../sigmatr-ui.js'];
       (function tenta() {
         if (!vias.length) return panico('sigmatr-ui.js não foi encontrado',
           'O arquivo da casca precisa estar ao lado desta página. Sirva por HTTP, não por file://.');
