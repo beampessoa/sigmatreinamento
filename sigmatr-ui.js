@@ -591,8 +591,12 @@ const SigmaTR = (() => {
     // Sem token = não entrou pelo link; manda para a porta (t.html).
     if (papel === 'treinando' && !opts.demo) {
       if (!tokenTreinando()) { window.location.href = 't.html'; return; }
-      perfil = perfil || 'Treinando';
-      // nome/empresa reais vêm da /api/ na própria página (inicio.html).
+      // nome + função reais, guardados quando a pessoa entrou pela t.html.
+      try {
+        const cache = JSON.parse(sessionStorage.getItem('st_treinando') || 'null');
+        if (cache) { nome = nome || cache.nome || ''; perfil = perfil || cache.funcao || ''; }
+      } catch (e) {}
+      perfil = perfil || 'Treinando';   // fallback se não houver cache/função
     }
 
     // ADMIN: continua por sessão do Supabase (login de admin).
@@ -970,7 +974,15 @@ const SigmaTR = (() => {
     conectar, sessao, auth, rpc, fn, rotaPorPapel,
     guardarToken, temToken: () => !!tokenTreinando(),
     tokenCru: () => tokenTreinando(),
-    entrarPorToken: (t) => { guardarToken(t); return fn('sessao-token', { token: t }, { publico:true }); },
+    entrarPorToken: async (t) => {
+      guardarToken(t);
+      const p = await fn('sessao-token', { token: t }, { publico:true });
+      // Guarda nome+função para o header exibir em qualquer página do treinando
+      // (o player não chama a ficha; sem este cache o header não saberia quem é).
+      try { if (p) sessionStorage.setItem('st_treinando',
+              JSON.stringify({ nome: p.nome || '', funcao: p.funcao || '' })); } catch (e) {}
+      return p;
+    },
     papel: papelDaSessao, ROTULO_ONDA1, rotular,
     portao, trilho, agora, procedencia, sinalFraco,
     get db() { return db; }
