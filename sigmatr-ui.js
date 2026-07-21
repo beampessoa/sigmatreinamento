@@ -304,7 +304,7 @@ const SigmaTR = (() => {
 .st-player{background:#fff;border:1px solid #E5E7EB;border-radius:12px;
   overflow:hidden;box-shadow:0 1px 2px rgba(16,24,40,.06)}
 .st-video{position:relative;background:#000;aspect-ratio:16/9}
-.st-video > div{position:absolute;inset:0}
+.st-video > div,.st-video > iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 /* capa: o clique no iframe do YouTube abre menu e pausa. Interceptamos. */
 .st-capa{position:absolute;inset:0;cursor:pointer;z-index:2}
 
