@@ -436,6 +436,25 @@ const SigmaTR = (() => {
 /* SINAL FRACO (fora do player: o player tem a própria faixa) */
 .st-faixa-rede{position:fixed;left:0;right:0;bottom:0;z-index:80;background:#B45309;color:#fff;
   text-align:center;padding:9px 14px;font-size:13px;font-weight:600}
+
+/* PROVA — reaproveita .st-cp-alt (alvo 48px). Só acrescenta seleção e resultado. */
+.st-q{margin-bottom:14px}
+.st-q-num{font-size:10.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#9CA3AF;margin-bottom:6px}
+.st-q-enun{font-size:15px;font-weight:600;color:#1F2937;line-height:1.4;margin-bottom:12px}
+.st-cp-alt[aria-pressed="true"]{border-color:#0F4CBA;background:#EEF4FF;color:#0F4CBA;font-weight:600}
+.st-prova-barra{position:sticky;bottom:0;background:#fff;border-top:1px solid #E5E7EB;
+  padding:12px 2px;display:flex;align-items:center;gap:12px;margin-top:8px}
+.st-prova-cont{font-size:13px;color:#6B7280}
+.st-prova-cont b{color:#1F2937}
+.st-result{background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:24px 20px;text-align:center;
+  box-shadow:0 1px 2px rgba(16,24,40,.06)}
+.st-result-nota{font-family:'Exo 2',sans-serif;font-size:46px;font-weight:800;line-height:1;margin:8px 0}
+.st-result[data-ok="1"] .st-result-nota{color:#16A34A}
+.st-result[data-ok="0"] .st-result-nota{color:#DC2626}
+.st-result h2{margin:2px 0 4px;font-size:20px;font-weight:700;color:#1F2937}
+.st-result p{margin:6px 0;font-size:13.5px;color:#6B7280;line-height:1.5}
+.st-result-assuntos{display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:12px 0}
+.st-chip{font-size:12px;background:#FEF3F2;border:1px solid #FECACA;color:#B91C1C;border-radius:999px;padding:3px 10px}
 `;
 
   function injectCSS() {

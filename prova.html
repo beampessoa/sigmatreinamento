@@ -1,0 +1,171 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Prova · Sigma Treinamentos</title>
+</head>
+
+<!--
+  prova.html — uma tela só, guiada por dados. Serve qualquer módulo.
+  Fluxo: iniciar-prova (sorteia questões SEM gabarito) → responder →
+  corrigir-prova (corrige no servidor e já emite o selo se aprovar).
+  A resposta certa nunca chega ao HTML. CSS mora no sigmatr-ui.js.
+-->
+
+<body data-shell="treinando" data-pagina="prova">
+
+  <div id="app"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+  /* BOOT — se a casca não carregar, a página grita em vez de ficar branca. */
+  (function () {
+    function panico(t, d) {
+      document.body.innerHTML =
+        '<div style="position:fixed;inset:0;background:#B91C1C;color:#fff;padding:26px;overflow:auto;'
+        + 'font:15px/1.55 -apple-system,Segoe UI,sans-serif">'
+        + '<h1 style="margin:0 0 10px;font-size:22px">Casca não carregou — ' + t + '</h1>'
+        + '<p>' + d + '</p></div>';
+      throw new Error('[boot] ' + t);
+    }
+    window.STBOOT = function (pagina) {
+      var vias = ['/sigmatr-ui.js', 'sigmatr-ui.js', '../sigmatr-ui.js'];
+      (function tenta() {
+        if (!vias.length) return panico('sigmatr-ui.js não foi encontrado',
+          'O arquivo da casca precisa estar ao lado desta página. Sirva por HTTP, não por file://.');
+        var el = document.createElement('script');
+        el.src = vias.shift();
+        el.onerror = tenta;
+        el.onload = function () {
+          if (!window.SigmaTR) return panico('sigmatr-ui.js carregou mas não definiu SigmaTR',
+            'Arquivo truncado? Baixe de novo.');
+          if (!window.supabase) return panico('supabase-js não carregou',
+            'CDN bloqueado ou sem rede. A casca precisa dele antes de montar.');
+          pagina();
+        };
+        document.head.appendChild(el);
+      })();
+    };
+  })();
+  </script>
+
+  <script>
+  STBOOT(async () => {
+    const $ = id => document.getElementById(id);
+    const REVISAO_ID = new URLSearchParams(location.search).get('r');
+
+    await SigmaTR.init({ titulo: 'Prova' });
+    const app = $('app');
+
+    if (!REVISAO_ID) {
+      app.innerHTML = SigmaTR.vazio({
+        titulo: 'Prova não informada',
+        texto: 'Volte e escolha um item da sua ficha.',
+        acao: 'Minha ficha', href: 'inicio.html' });
+      return;
+    }
+
+    // ── inicia a prova (sorteia questões, cria a tentativa) ──
+    let P;
+    try {
+      P = await SigmaTR.fn('iniciar-prova', { revisao_id: REVISAO_ID });
+    } catch (e) {
+      if (e && e.status === 401) { location.replace('t.html'); return; }
+      const msg = (e && e.corpo && e.corpo.erro) || (e && e.message) ||
+                  'Não foi possível iniciar a prova agora.';
+      app.innerHTML = SigmaTR.vazio({
+        titulo: 'Prova indisponível',
+        texto: msg,
+        acao: 'Minha ficha', href: 'inicio.html' });
+      return;
+    }
+
+    const qs = P.questoes || [];
+    const respostas = {};
+
+    if (!qs.length) {
+      app.innerHTML = SigmaTR.vazio({
+        titulo: 'Esta prova ainda não tem questões',
+        texto: 'O Controle da Qualidade ainda não cadastrou as questões desta revisão.',
+        acao: 'Minha ficha', href: 'inicio.html' });
+      return;
+    }
+
+    // ── monta a tela ──
+    app.innerHTML = `
+      <div class="st-doc">
+        <div class="st-doc-eyebrow">Prova · tentativa ${P.numero}</div>
+        <div class="st-doc-titulo">Responda para liberar sua aptidão</div>
+        <div class="st-doc-meta">Nota mínima <b>${SigmaTR.esc(P.nota_minima)}</b> · ${qs.length} questões · sem consulta</div>
+      </div>
+      <div id="qs"></div>
+      <div class="st-prova-barra">
+        <span class="st-prova-cont" id="cont"><b>0</b>/${qs.length} respondidas</span>
+        <button class="st-btn" id="enviar" style="margin-left:auto" disabled>Enviar prova</button>
+      </div>
+      <p class="st-nota-rodape">A correção é registrada. Ao passar, seu selo é emitido automaticamente.</p>`;
+
+    const cq = $('qs');
+    qs.forEach((q, i) => {
+      const alts = (q.alternativas || []).map(a =>
+        `<button class="st-btn st-cp-alt" data-q="${SigmaTR.esc(q.id)}" data-a="${SigmaTR.esc(a.id)}" aria-pressed="false">${SigmaTR.esc(a.texto)}</button>`
+      ).join('');
+      cq.insertAdjacentHTML('beforeend', `
+        <div class="st-cartao st-q">
+          <div class="st-q-num">Questão ${i + 1}</div>
+          <div class="st-q-enun">${SigmaTR.esc(q.enunciado)}</div>
+          <div class="st-cp-alts">${alts}</div>
+        </div>`);
+    });
+
+    // ── seleção (radio: uma por questão) ──
+    cq.querySelectorAll('.st-cp-alt').forEach(b => b.onclick = () => {
+      const qid = b.dataset.q;
+      cq.querySelectorAll('[data-q="' + CSS.escape(qid) + '"]')
+        .forEach(x => x.setAttribute('aria-pressed', 'false'));
+      b.setAttribute('aria-pressed', 'true');
+      respostas[qid] = b.dataset.a;
+      const n = Object.keys(respostas).length;
+      $('cont').innerHTML = `<b>${n}</b>/${qs.length} respondidas`;
+      $('enviar').disabled = n < qs.length;
+    });
+
+    // ── envio e correção ──
+    $('enviar').onclick = async () => {
+      $('enviar').disabled = true;
+      $('enviar').textContent = 'Corrigindo…';
+      let R;
+      try {
+        R = await SigmaTR.fn('corrigir-prova', { tentativa_id: P.tentativa_id, respostas });
+      } catch (e) {
+        $('enviar').disabled = false;
+        $('enviar').textContent = 'Enviar prova';
+        SigmaTR.toast((e && e.corpo && e.corpo.erro) || 'Falha ao enviar. Tente de novo.', 'erro');
+        return;
+      }
+
+      const ok = !!R.aprovado;
+      const assuntos = (R.assuntos || []).map(a => `<span class="st-chip">${SigmaTR.esc(a)}</span>`).join('');
+
+      app.innerHTML = `
+        <div class="st-result" data-ok="${ok ? 1 : 0}">
+          <div class="st-doc-eyebrow">${ok ? 'Aprovado' : 'Não atingiu a nota'}</div>
+          <div class="st-result-nota">${SigmaTR.esc(R.nota)}</div>
+          <h2>${ok ? 'Você está apto neste procedimento' : 'Ainda não'}</h2>
+          <p>${SigmaTR.esc(R.acertos)} de ${SigmaTR.esc(R.total)} questões · nota mínima ${SigmaTR.esc(R.nota_minima)}</p>
+          ${ok
+            ? '<p>Seu selo foi emitido e aparece na sua ficha. Ele vale por 24 meses.</p>'
+            : (assuntos ? `<p>Reveja estes pontos antes de tentar de novo:</p><div class="st-result-assuntos">${assuntos}</div>` : '')}
+          ${(!ok && R.proxima_em) ? `<p>Você poderá tentar novamente a partir de <b>${SigmaTR.fmt.data(R.proxima_em)}</b>.</p>` : ''}
+          <a class="st-btn" style="margin-top:14px;display:inline-flex"
+             href="${ok ? 'inicio.html' : (R.proxima_em ? 'inicio.html' : 'player.html?r=' + encodeURIComponent(REVISAO_ID))}">
+            ${ok ? 'Ver minha ficha' : (R.proxima_em ? 'Voltar à ficha' : 'Rever o vídeo')}
+          </a>
+        </div>`;
+      window.scrollTo(0, 0);
+    };
+  });
+  </script>
+</body>
+</html>
