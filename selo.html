@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Meu selo · Sigma Treinamentos</title>
+</head>
+
+<!--
+  selo.html — a APTIDÃO DA FUNÇÃO, não o selo por procedimento.
+  Lê vw_aptidao_pessoa (via /api/minha-aptidao, com o token):
+    apto_no_escopo = true  → crachá aceso (QR + validade)
+    caso contrário         → "faltam X procedimentos"
+  O selo por procedimento é engrenagem interna; o trabalhador nunca o vê.
+  CSS mora no sigmatr-ui.js.
+-->
+
+<body data-shell="treinando" data-pagina="selo">
+
+  <div id="app"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script>
+  /* BOOT — se a casca não carregar, a página grita em vez de ficar branca. */
+  (function () {
+    function panico(t, d) {
+      document.body.innerHTML =
+        '<div style="position:fixed;inset:0;background:#B91C1C;color:#fff;padding:26px;overflow:auto;'
+        + 'font:15px/1.55 -apple-system,Segoe UI,sans-serif">'
+        + '<h1 style="margin:0 0 10px;font-size:22px">Casca não carregou — ' + t + '</h1>'
+        + '<p>' + d + '</p></div>';
+      throw new Error('[boot] ' + t);
+    }
+    window.STBOOT = function (pagina) {
+      var vias = ['/sigmatr-ui.js', 'sigmatr-ui.js', '../sigmatr-ui.js'];
+      (function tenta() {
+        if (!vias.length) return panico('sigmatr-ui.js não foi encontrado',
+          'O arquivo da casca precisa estar ao lado desta página. Sirva por HTTP, não por file://.');
+        var el = document.createElement('script');
+        el.src = vias.shift();
+        el.onerror = tenta;
+        el.onload = function () {
+          if (!window.SigmaTR) return panico('sigmatr-ui.js carregou mas não definiu SigmaTR',
+            'Arquivo truncado? Baixe de novo.');
+          if (!window.supabase) return panico('supabase-js não carregou',
+            'CDN bloqueado ou sem rede. A casca precisa dele antes de montar.');
+          pagina();
+        };
+        document.head.appendChild(el);
+      })();
+    };
+  })();
+  </script>
+
+  <script>
+  STBOOT(async () => {
+    const $ = id => document.getElementById(id);
+
+    // ===================================================================
+    // AJUSTE: para onde o QR do crachá aponta (a ficha pública por código).
+    // Troque pelo caminho real da sua página pública de verificação.
+    const VERIF_URL = cod => location.origin + '/v/' + encodeURIComponent(cod);
+    // ===================================================================
+
+    await SigmaTR.init({ titulo: 'Meu selo' });
+    const app = $('app');
+
+    let A;
+    try {
+      A = await SigmaTR.fn('minha-aptidao');   // token no corpo, automático
+    } catch (e) {
+      if (e && e.status === 401) { location.replace('t.html'); return; }
+      app.innerHTML = SigmaTR.vazio({
+        titulo: 'Não deu para carregar agora',
+        texto: 'Falha de conexão. Tente abrir de novo em instantes.',
+        acao: 'Minha ficha', href: 'inicio.html' });
+      return;
+    }
+
+    if (!A) {
+      app.innerHTML = SigmaTR.vazio({
+        titulo: 'Sem dados de aptidão',
+        texto: 'Não encontramos sua função. Procure o Controle da Qualidade.',
+        acao: 'Minha ficha', href: 'inicio.html' });
+      return;
+    }
+
+    // ── função sem matriz / pessoa sem função ──
+    if (A.bloqueio) {
+      app.innerHTML = SigmaTR.vazio({
+        titulo: 'Seu selo ainda não pode ser calculado',
+        texto: 'Motivo: ' + SigmaTR.esc(A.bloqueio) + '. O Controle da Qualidade precisa definir a matriz da sua função.',
+        acao: 'Minha ficha', href: 'inicio.html' });
+      return;
+    }
+
+    // ── APTO: crachá aceso ──
+    if (A.apto_no_escopo) {
+      const val = A.vence_em ? SigmaTR.fmt.data(A.vence_em) : '—';
+      app.innerHTML = `
+        <div class="st-selo">
+          <div class="st-selo-check">● APTO PARA A ÁREA</div>
+          <div class="st-selo-nome">${SigmaTR.esc(A.nome || '')}</div>
+          <div class="st-selo-funcao">${SigmaTR.esc(A.funcao || '')}</div>
+          <div class="st-selo-qr" id="qr"></div>
+          <div class="st-selo-val">Válido até <b>${val}</b>${
+            A.dias_para_vencer != null ? ` · ${A.dias_para_vencer} dias` : ''}</div>
+          <div class="st-selo-cod">${SigmaTR.esc(A.codigo_publico || '')}</div>
+        </div>
+        <p class="st-nota-rodape">Este selo representa todos os procedimentos obrigatórios da sua função cumpridos. O QR aponta para a sua ficha, que se atualiza sozinha.</p>`;
+
+      if (window.QRCode && A.codigo_publico) {
+        new QRCode($('qr'), {
+          text: VERIF_URL(A.codigo_publico),
+          width: 176, height: 176,
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }
+      return;
+    }
+
+    // ── NÃO APTO: faltam X ──
+    const total  = A.exigidos_gerenciados || 0;
+    const feitos = A.liberados || 0;
+    const faltam = Math.max(0, total - feitos);
+    const pct = total ? Math.round(feitos / total * 100) : 0;
+
+    const detalhe = [];
+    if (A.nunca_fez)      detalhe.push(`${A.nunca_fez} não iniciado(s)`);
+    if (A.em_carencia)    detalhe.push(`${A.em_carencia} em carência`);
+    if (A.inapto_revisao) detalhe.push(`${A.inapto_revisao} com revisão nova`);
+    if (A.inapto_vencido) detalhe.push(`${A.inapto_vencido} vencido(s)`);
+
+    app.innerHTML = `
+      <div class="st-faltam">
+        <div class="st-doc-eyebrow">Aptidão da função</div>
+        <div class="st-faltam-num">${faltam}</div>
+        <h2>${faltam === 1 ? 'Falta 1 procedimento' : 'Faltam ' + faltam + ' procedimentos'}</h2>
+        <p>Você cumpriu <b>${feitos}</b> de <b>${total}</b> obrigatórios de ${SigmaTR.esc(A.funcao || 'sua função')}.</p>
+        <div class="st-faltam-prog"><span style="width:${pct}%"></span></div>
+        ${detalhe.length ? `<p>${SigmaTR.esc(detalhe.join(' · '))}</p>` : ''}
+        <a class="st-btn" style="margin-top:12px;display:inline-flex" href="inicio.html">Ver o que falta</a>
+      </div>
+      <p class="st-nota-rodape">Seu selo é emitido automaticamente quando todos os procedimentos da sua função estiverem cumpridos.</p>`;
+  });
+  </script>
+</body>
+</html>
