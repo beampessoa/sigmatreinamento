@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Prévia do selo · Sigma Treinamentos</title>
+</head>
+
+<!--
+  selo-preview.html — SÓ para decidir o layout. Dados FAKE, sem token, sem API.
+  Renderiza o mesmo markup da selo.html de produção (mesmas classes .st-selo /
+  .st-faltam do sigmatr-ui.js). Nao existe em producao; nao le nem escreve nada.
+-->
+
+<body data-shell="treinando" data-pagina="selo">
+
+  <div id="app"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+  <script>
+  (function () {
+    function panico(t, d) {
+      document.body.innerHTML =
+        '<div style="position:fixed;inset:0;background:#B91C1C;color:#fff;padding:26px;overflow:auto;'
+        + 'font:15px/1.55 -apple-system,Segoe UI,sans-serif">'
+        + '<h1 style="margin:0 0 10px;font-size:22px">Casca não carregou — ' + t + '</h1>'
+        + '<p>' + d + '</p></div>';
+      throw new Error('[boot] ' + t);
+    }
+    window.STBOOT = function (pagina) {
+      var vias = ['/sigmatr-ui.js', 'sigmatr-ui.js', '../sigmatr-ui.js'];
+      (function tenta() {
+        if (!vias.length) return panico('sigmatr-ui.js não foi encontrado',
+          'O arquivo da casca precisa estar ao lado desta página.');
+        var el = document.createElement('script');
+        el.src = vias.shift();
+        el.onerror = tenta;
+        el.onload = function () {
+          if (!window.SigmaTR) return panico('sigmatr-ui.js carregou mas não definiu SigmaTR', 'Arquivo truncado?');
+          if (!window.supabase) return panico('supabase-js não carregou', 'CDN bloqueado ou sem rede.');
+          pagina();
+        };
+        document.head.appendChild(el);
+      })();
+    };
+  })();
+  </script>
+
+  <script>
+  STBOOT(async () => {
+    const $ = id => document.getElementById(id);
+
+    // modo demo: a casca nao exige token nesta pagina
+    await SigmaTR.init({ demo: true, titulo: 'Prévia do selo', nome: 'José Carlos de Almeida', perfil: 'Soldador' });
+
+    const rotulo = (t) => `<div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+      color:#9CA3AF;margin:24px 0 8px">${t}</div>`;
+
+    // ── dados FAKE ──
+    const A = { nome: 'José Carlos de Almeida', funcao: 'Soldador', vence_em: '2028-01-24',
+                dias_para_vencer: 730, codigo_publico: 'EEFDQW52' };
+    const val = SigmaTR.fmt.data(A.vence_em);
+
+    // ── estado FALTAM (fake) ──
+    const total = 4, feitos = 2, faltam = total - feitos, pct = Math.round(feitos/total*100);
+
+    $('app').innerHTML = `
+      ${rotulo('Estado 1 — APTO (crachá aceso)')}
+      <div class="st-selo">
+        <div class="st-selo-check">● APTO PARA A ÁREA</div>
+        <div class="st-selo-nome">${SigmaTR.esc(A.nome)}</div>
+        <div class="st-selo-funcao">${SigmaTR.esc(A.funcao)}</div>
+        <div class="st-selo-qr" id="qr"></div>
+        <div class="st-selo-val">Válido até <b>${val}</b> · ${A.dias_para_vencer} dias</div>
+        <div class="st-selo-cod">${SigmaTR.esc(A.codigo_publico)}</div>
+      </div>
+      <p class="st-nota-rodape">Este selo representa todos os procedimentos obrigatórios da sua função cumpridos.</p>
+
+      ${rotulo('Estado 2 — NÃO APTO (faltam X)')}
+      <div class="st-faltam">
+        <div class="st-doc-eyebrow">Aptidão da função</div>
+        <div class="st-faltam-num">${faltam}</div>
+        <h2>Faltam ${faltam} procedimentos</h2>
+        <p>Você cumpriu <b>${feitos}</b> de <b>${total}</b> obrigatórios de Soldador.</p>
+        <div class="st-faltam-prog"><span style="width:${pct}%"></span></div>
+        <p>1 não iniciado · 1 em carência</p>
+        <a class="st-btn" style="margin-top:12px;display:inline-flex" href="#">Ver o que falta</a>
+      </div>
+      <p class="st-nota-rodape">Seu selo é emitido automaticamente quando todos os procedimentos estiverem cumpridos.</p>`;
+
+    if (window.QRCode) {
+      new QRCode($('qr'), { text: 'https://exemplo/v/' + A.codigo_publico, width: 176, height: 176, correctLevel: QRCode.CorrectLevel.M });
+    }
+  });
+  </script>
+</body>
+</html>
